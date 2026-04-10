@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app@latest:*)",
+      "Bash(cp -r lumix-temp/* lumix-projeto/)",
+      "Bash(cp lumix-temp/.gitignore lumix-projeto/)",
+      "Bash(cp lumix-temp/.eslintrc.json lumix-projeto/)",
+      "Bash(cp lumix-temp/tsconfig.json lumix-projeto/)",
+      "Bash(cp /c/Users/brunn/lumix-temp/package.json /c/Users/brunn/lumix-projeto/)",
+      "Bash(cp /c/Users/brunn/lumix-temp/package-lock.json /c/Users/brunn/lumix-projeto/)",
+      "Bash(cp /c/Users/brunn/lumix-temp/.gitignore /c/Users/brunn/lumix-projeto/)",
+      "Bash(cp /c/Users/brunn/lumix-temp/postcss.config.mjs /c/Users/brunn/lumix-projeto/)",
+      "Bash(cp /c/Users/brunn/lumix-temp/tsconfig.json /c/Users/brunn/lumix-projeto/)",
+      "Bash(cp:*)",
+      "Bash(git checkout:*)",
+      "Bash(grep -E \"\\\\.\\(md|mdx\\)$\")",
+      "Bash(npm install:*)",
+      "Bash(npx shadcn@latest:*)"
+    ]
+  }
+}
