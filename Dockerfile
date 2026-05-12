@@ -33,12 +33,18 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Script de entrypoint que substitui placeholders pelos valores reais
-RUN echo '#!/bin/sh' > /app/entrypoint.sh && \
-    echo 'find /app/.next -type f -name "*.js" -exec sed -i "s|NEXT_PUBLIC_SUPABASE_URL_PLACEHOLDER|$NEXT_PUBLIC_SUPABASE_URL|g" {} +' >> /app/entrypoint.sh && \
-    echo 'find /app/.next -type f -name "*.js" -exec sed -i "s|NEXT_PUBLIC_SUPABASE_ANON_KEY_PLACEHOLDER|$NEXT_PUBLIC_SUPABASE_ANON_KEY|g" {} +' >> /app/entrypoint.sh && \
-    echo 'exec node server.js' >> /app/entrypoint.sh && \
-    chmod +x /app/entrypoint.sh
+# Dar permissão para o entrypoint modificar os arquivos
+RUN chown -R nextjs:nodejs /app/.next
+
+# Script de entrypoint
+COPY --chmod=755 <<'EOF' /app/entrypoint.sh
+#!/bin/sh
+set -e
+# Substituir placeholders pelos valores reais das env vars
+find /app/.next -type f \( -name "*.js" -o -name "*.json" \) | xargs sed -i "s|NEXT_PUBLIC_SUPABASE_URL_PLACEHOLDER|${NEXT_PUBLIC_SUPABASE_URL}|g" 2>/dev/null || true
+find /app/.next -type f \( -name "*.js" -o -name "*.json" \) | xargs sed -i "s|NEXT_PUBLIC_SUPABASE_ANON_KEY_PLACEHOLDER|${NEXT_PUBLIC_SUPABASE_ANON_KEY}|g" 2>/dev/null || true
+exec node server.js
+EOF
 
 USER nextjs
 
@@ -47,4 +53,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["/bin/sh", "/app/entrypoint.sh"]
+CMD ["/app/entrypoint.sh"]
