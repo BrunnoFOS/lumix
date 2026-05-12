@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/sync-usinas?secret=${CRON_SECRET}",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/sync-alertas?secret=${CRON_SECRET}",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

@@ -63,6 +63,7 @@ Empresas clientes da Lumix. Suporta matriz/filial via campo `matriz_id`.
 | email | text | | Email de contato |
 | responsavel | text | | Nome do responsável |
 | ativa | boolean | NOT NULL, default true | Se a empresa está ativa |
+| arquivada | boolean | NOT NULL, default false | Se a empresa está arquivada |
 | created_at | timestamptz | NOT NULL, default now() | |
 | updated_at | timestamptz | NOT NULL, default now() | |
 
@@ -92,9 +93,11 @@ Unidades consumidoras (UCs) com dados técnicos do sistema fotovoltaico.
 | endereco | text | | Endereço da instalação |
 | cidade | text | | Cidade |
 | estado | text | | UF |
-| distribuidora | text | NOT NULL | Nome da distribuidora (ex: CEMIG, CPFL) |
+| distribuidora | text | | Sigla da concessionária (ex: CEMIG, CPFL). Null se ACL |
+| grupo_tarifario | text | check in ('grupo_a','grupo_b','acl'), nullable | Classificação: Grupo A, Grupo B ou ACL (Mercado Livre) |
+| subgrupo | text | nullable | Subgrupo tarifário (A1-A4, AS, B1-B4) |
 | enquadramento_tarifario | text | NOT NULL, check in ('monofasico','bifasico','trifasico') | Tipo de ligação |
-| modalidade_tarifaria | text | NOT NULL, check in ('convencional','branca','verde','azul'), default 'convencional' | Modalidade tarifária |
+| modalidade_tarifaria | text | nullable | Modalidade tarifária (Azul, Verde, Convencional, Branca) |
 | potencia_instalada_kwp | decimal(10,2) | NOT NULL | Potência instalada em kWp |
 | quantidade_modulos | integer | NOT NULL | Quantidade de módulos fotovoltaicos |
 | modelo_modulos | text | | Modelo/fabricante dos módulos |
@@ -105,6 +108,8 @@ Unidades consumidoras (UCs) com dados técnicos do sistema fotovoltaico.
 | data_instalacao | date | | Data de instalação do sistema |
 | geracao_estimada_mensal_kwh | decimal(10,2) | | Estimativa de geração mensal em kWh |
 | ativa | boolean | NOT NULL, default true | Se a UC está ativa |
+| arquivada | boolean | NOT NULL, default false | Se a UC está arquivada |
+| station_id | text | | ID da usina na Solis Cloud (vinculação externa) |
 | observacoes | text | | Notas adicionais |
 | created_at | timestamptz | NOT NULL, default now() | |
 | updated_at | timestamptz | NOT NULL, default now() | |
@@ -158,6 +163,17 @@ Faturas de energia (dados inseridos manualmente pelo admin ou via upload de imag
 | id | uuid | PK, default gen_random_uuid() | |
 | uc_id | uuid | FK → unidades_consumidoras.id, NOT NULL | UC da fatura |
 | mes_referencia | date | NOT NULL | Mês/ano de referência |
+| denominacao | text | | Denominação da UC na fatura |
+| contrato | text | | Número do contrato |
+| valor_faturado | decimal(10,2) | | Valor faturado (R$) |
+| inicio_ciclo | date | | Início do ciclo de faturamento |
+| fim_ciclo | date | | Fim do ciclo de faturamento |
+| energia_faturada_fp | decimal(10,2) | | Energia faturada fora ponta (kWh) |
+| valor_tarifa_fp | decimal(10,6) | | Valor da tarifa fora ponta (R$/kWh) |
+| kwh_compensado_fp | decimal(10,2) | | kWh compensado fora ponta |
+| tarifa_compensada_fp | decimal(10,6) | | Tarifa da energia compensada fora ponta (R$/kWh) |
+| energia_consumida_fp | decimal(10,2) | | Energia consumida fora ponta (kWh) |
+| energia_injetada_fp | decimal(10,2) | | Energia injetada fora ponta (kWh) |
 | valor_total | decimal(10,2) | | Valor total da fatura (R$) |
 | consumo_kwh | decimal(10,2) | | Consumo faturado em kWh |
 | energia_injetada_kwh | decimal(10,2) | | Energia injetada na rede |
@@ -166,6 +182,7 @@ Faturas de energia (dados inseridos manualmente pelo admin ou via upload de imag
 | valor_tusd | decimal(10,2) | | Valor da TUSD na fatura |
 | valor_te | decimal(10,2) | | Valor da TE na fatura |
 | economia_estimada | decimal(10,2) | | Economia estimada no mês (R$) |
+| pdf_url | text | | URL do PDF da fatura |
 | imagem_url | text | | URL da imagem da fatura (upload do cliente) |
 | dados_extraidos | jsonb | | Dados extraídos via API externa (OCR) |
 | status | text | NOT NULL, check in ('pendente','processada','erro'), default 'pendente' | Status do processamento |
@@ -202,6 +219,7 @@ Relatórios gerados por UC e período.
 | status_envio | text | NOT NULL, check in ('pendente','enviado','erro'), default 'pendente' | Status do envio ao cliente |
 | gerado_por | text | NOT NULL, check in ('automatico','manual'), default 'manual' | Forma de geração |
 | fatura_id | uuid | FK → faturas.id, nullable | Fatura usada como base |
+| arquivado | boolean | NOT NULL, default false | Se o relatório está arquivado |
 | created_at | timestamptz | NOT NULL, default now() | |
 | updated_at | timestamptz | NOT NULL, default now() | |
 
@@ -213,32 +231,29 @@ Relatórios gerados por UC e período.
 
 ---
 
-### `tarifas`
+### `usinas_cache`
 
-Tarifas TUSD/TE por distribuidora e posto tarifário.
+Cache de usinas sincronizadas via cron n8n. O frontend lê desta tabela — nunca chama a API do provedor diretamente.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
-| id | uuid | PK, default gen_random_uuid() | |
-| distribuidora | text | NOT NULL | Nome da distribuidora |
-| modalidade | text | NOT NULL, check in ('convencional','branca','verde','azul') | Modalidade tarifária |
-| posto_tarifario | text | NOT NULL, check in ('ponta','fora_ponta','intermediario','unico') | Posto tarifário |
-| valor_tusd | decimal(10,6) | NOT NULL | Valor TUSD (R$/kWh) |
-| valor_te | decimal(10,6) | NOT NULL | Valor TE (R$/kWh) |
-| valor_total | decimal(10,6) | NOT NULL | TUSD + TE |
-| vigencia_inicio | date | NOT NULL | Início da vigência |
-| vigencia_fim | date | | Fim da vigência (null = vigente) |
-| ativa | boolean | NOT NULL, default true | Se a tarifa está vigente |
-| created_at | timestamptz | NOT NULL, default now() | |
-| updated_at | timestamptz | NOT NULL, default now() | |
+| station_id | text | PK | ID único da usina no provedor |
+| provider | text | NOT NULL, check in ('solis','sungrow') | Provedor de origem |
+| station_name | text | NOT NULL | Nome da usina |
+| cidade_uf | text | nullable | Localização (Cidade/UF) |
+| potencia_instalada_kwp | decimal(10,2) | NOT NULL, default 0 | Potência total em kWp |
+| qtd_inversores | integer | NOT NULL, default 0 | Quantidade de inversores |
+| modelo_inversores | text[] | | Array de modelos |
+| potencia_inversor_kw | decimal(10,2) | default 0 | Potência por inversor em kW |
+| data_instalacao | date | nullable | Data de instalação |
+| inversores_detalhe | jsonb | default '[]' | Detalhes de cada inversor (sn, model, state) |
+| synced_at | timestamptz | NOT NULL, default now() | Última sincronização |
 
-**Unique constraint:** (distribuidora, modalidade, posto_tarifario, vigencia_inicio)
+**RPC:** `sync_usinas_cache(payload jsonb)` — recebe array de usinas, faz upsert em massa, retorna `{upserted, total}`.
 
 **RLS Policies:**
 - SELECT: Todos os usuários autenticados.
-- INSERT: Apenas admin.
-- UPDATE: Apenas admin.
-- DELETE: Apenas admin.
+- INSERT/UPDATE/DELETE: Apenas admin.
 
 ---
 
@@ -274,6 +289,35 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 ---
 
+### `tarifas_aneel`
+
+Tarifas importadas do BI da ANEEL. Registros nunca são sobrescritos — cada importação insere novos registros com seu período de vigência. Relatórios buscam a tarifa cuja vigência cobre o mês de referência.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | uuid | PK, default gen_random_uuid() | |
+| sigla | text | NOT NULL | Sigla da concessionária (ex: CELESC, CEMIG) |
+| subgrupo | text | NOT NULL | Ex: A4, B1, B2, B3 |
+| modalidade | text | nullable | Ex: Verde, Azul (null para grupo B) |
+| posto | text | NOT NULL | Ex: Ponta, Fora ponta, Não se aplica |
+| tusd | decimal(10,6) | NOT NULL | Valor TUSD em R$/kWh |
+| te | decimal(10,6) | NOT NULL | Valor TE em R$/kWh |
+| vigencia_inicio | date | NOT NULL | Início da vigência |
+| vigencia_fim | date | nullable | Fim da vigência (null = vigente) |
+| importado_em | timestamptz | NOT NULL, default now() | Data/hora da importação |
+| created_at | timestamptz | NOT NULL, default now() | |
+
+**Unique constraint:** (sigla, subgrupo, COALESCE(modalidade, ''), posto, vigencia_inicio)
+
+**Lookup para relatórios:** Dado sigla + subgrupo + modalidade + posto + mes_referencia, buscar a tarifa onde vigencia_inicio <= mes_referencia AND (vigencia_fim IS NULL OR vigencia_fim >= mes_referencia).
+
+**RLS Policies:**
+- SELECT: Todos os usuários autenticados.
+- INSERT: Apenas admin.
+- DELETE: Apenas admin.
+
+---
+
 ## Indexes
 
 | Table | Column(s) | Type | Reason |
@@ -287,7 +331,9 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 | faturas | uc_id, mes_referencia | btree (unique) | Busca por UC e período |
 | relatorios | empresa_id | btree | Filtro por empresa |
 | relatorios | uc_id, mes_referencia | btree | Busca por UC e período |
-| tarifas | distribuidora, modalidade | btree | Filtro por distribuidora |
+| tarifas_aneel | sigla, subgrupo, posto, vigencia_inicio | btree | Lookup por concessionária |
+| tarifas_aneel | vigencia_inicio, vigencia_fim | btree | Busca por vigência |
+| tarifas_aneel | sigla, subgrupo, COALESCE(modalidade,''), posto, vigencia_inicio | unique | Evitar duplicatas |
 
 ---
 
