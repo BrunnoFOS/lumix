@@ -308,3 +308,83 @@ export async function createFaturaCliente(formData: FormData): Promise<ActionRes
   revalidatePath("/cliente/fatura");
   return { data: { id: data.id } };
 }
+
+// ——— Criação de fatura com dados de geração (admin) ———
+
+export async function createFaturaComGeracao(formData: FormData): Promise<ActionResult> {
+  const supabase = await createServerClient();
+
+  const uc_id = formData.get("uc_id") as string;
+  const mes_referencia = formData.get("mes_referencia") as string;
+
+  if (!uc_id || !mes_referencia) {
+    return { error: "UC e mês de referência são obrigatórios." };
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from("faturas")
+    .insert({
+      uc_id,
+      mes_referencia,
+      pdf_url: str(formData.get("pdf_url") as string),
+      imagem_url: str(formData.get("imagem_url") as string),
+      status: "pendente",
+      inserido_por: user?.id ?? null,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      return { error: "Já existe fatura para esta UC neste mês de referência." };
+    }
+    return { error: "Erro ao criar fatura." };
+  }
+
+  // Enviar webhook com dados de geração incluídos
+  const arquivoUrl = str(formData.get("pdf_url") as string) ?? str(formData.get("imagem_url") as string) ?? null;
+  const dadosGeracaoRaw = formData.get("dados_geracao") as string;
+  const stationId = formData.get("station_id") as string;
+
+  let dadosGeracao = null;
+  if (dadosGeracaoRaw) {
+    try {
+      dadosGeracao = JSON.parse(dadosGeracaoRaw);
+    } catch {
+      // ignora parse error
+    }
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user?.id ?? "")
+    .single();
+
+  try {
+    const res = await fetch(WEBHOOK_FATURA_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fatura_id: data.id,
+        uc_id,
+        mes_referencia,
+        arquivo_url: arquivoUrl,
+        station_id: stationId || null,
+        role: (profile?.role as "admin" | "cliente") ?? "admin",
+        user_id: user?.id ?? "",
+        dados_geracao: dadosGeracao,
+      }),
+    });
+    console.log("[webhook fatura+geracao]", res.status);
+  } catch (err) {
+    console.error("[webhook fatura+geracao] erro:", err);
+  }
+
+  revalidatePath("/admin/faturas");
+  return { data: { id: data.id } };
+}
