@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Sun,
   TrendingUp,
@@ -14,11 +14,13 @@ import {
   Target,
   FileText,
   CheckCircle,
+  Building2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Combobox } from "@/components/ui/combobox";
 import { Badge } from "@/components/ui/badge";
 import {
   BarChart,
@@ -31,34 +33,39 @@ import {
   ReferenceLine,
   Cell,
 } from "recharts";
-import { fetchGeracaoMensal, gerarRelatorioSolis } from "@/lib/actions/solis";
+import { fetchGeracaoMensalConsolidada, gerarRelatorioSolis } from "@/lib/actions/solis";
 import type { SolisGeracaoMensal as GeracaoData } from "@/lib/actions/solis";
-import type { UsinaUC } from "@/lib/actions/solis";
-import { ProviderFilterTabs, type ProviderFilter } from "@/components/shared/ProviderFilter";
+import { calcularGeracaoEstimadaUC } from "@/lib/actions/geracao-estimada";
+import { classificarDesempenho } from "@/lib/geracao-estimada";
 
 function formatKwh(v: number): string {
   return v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
-export interface UsinaComProvider extends UsinaUC {
-  provider: "solis" | "sungrow";
+export interface EmpresaOption {
+  id: string;
+  nome: string;
+}
+
+export interface UCComStations {
+  ucId: string;
+  codigoUc: string;
+  empresaId: string;
+  empresaNome: string;
+  stations: { station_id: string; provider: "solis" | "sungrow" }[];
 }
 
 interface Props {
-  usinas: UsinaComProvider[];
+  empresas: EmpresaOption[];
+  ucs: UCComStations[];
 }
 
-export function SolisGeracaoMensal({ usinas }: Props) {
+export function SolisGeracaoMensal({ empresas, ucs }: Props) {
   const now = new Date();
   const mesAtual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-  const [providerFilter, setProviderFilter] = useState<ProviderFilter>("todos");
-
-  const usinasFiltradas = providerFilter === "todos"
-    ? usinas
-    : usinas.filter((u) => u.provider === providerFilter);
-
-  const [stationId, setStationId] = useState(usinas[0]?.station_id ?? "");
+  const [empresaId, setEmpresaId] = useState("");
+  const [ucId, setUcId] = useState("");
   const [month, setMonth] = useState(mesAtual);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,34 +73,86 @@ export function SolisGeracaoMensal({ usinas }: Props) {
   const [gerando, setGerando] = useState(false);
   const [geradoOk, setGeradoOk] = useState(false);
   const [gerarError, setGerarError] = useState<string | null>(null);
+  const [prPercent, setPrPercent] = useState<number | null>(null);
+  const [geracaoEstimada, setGeracaoEstimada] = useState<number | null>(null);
 
-  const selectedUsina = usinas.find((u) => u.station_id === stationId) ?? usinasFiltradas[0];
-  const provider = selectedUsina?.provider ?? "solis";
+  // Filtrar UCs pela empresa selecionada
+  const ucsFiltradas = useMemo(
+    () => (empresaId ? ucs.filter((uc) => uc.empresaId === empresaId) : ucs),
+    [ucs, empresaId]
+  );
+
+  const selectedUc = ucs.find((uc) => uc.ucId === ucId);
+
+  const empresaOptions = useMemo(
+    () => empresas.map((e) => ({ value: e.id, label: e.nome })),
+    [empresas]
+  );
+
+  const ucOptions = useMemo(
+    () =>
+      ucsFiltradas.map((uc) => {
+        const providers = [...new Set(uc.stations.map((s) => s.provider))];
+        const providerLabel = providers.map((p) => p === "solis" ? "Solis" : "SunGrow").join(" + ");
+        return {
+          value: uc.ucId,
+          label: `${uc.codigoUc} (${providerLabel})`,
+        };
+      }),
+    [ucsFiltradas]
+  );
+
+  function handleEmpresaChange(id: string) {
+    setEmpresaId(id);
+    setUcId("");
+    setData(null);
+  }
 
   async function handleBuscar() {
-    if (!stationId || !month) return;
+    if (!selectedUc || !month) return;
     setLoading(true);
     setError(null);
     setData(null);
     setGeradoOk(false);
     setGerarError(null);
+    setPrPercent(null);
+    setGeracaoEstimada(null);
 
-    const result = await fetchGeracaoMensal(stationId, month, provider);
+    const result = await fetchGeracaoMensalConsolidada(selectedUc.stations, month);
 
     if (result.error) {
       setError(result.error);
     } else {
       setData(result.data);
+
+      // Calcular PR% real usando geração estimada da UC
+      if (result.data) {
+        const mesRef = `${month}-01`;
+        const geracaoReal = result.data.totais.geracao_kwh;
+        const estimativa = await calcularGeracaoEstimadaUC(selectedUc.ucId, mesRef, geracaoReal);
+        if ("data" in estimativa) {
+          setPrPercent(estimativa.data.pr_percent ?? null);
+          setGeracaoEstimada(estimativa.data.geracao_estimada_kwh);
+        }
+      }
     }
     setLoading(false);
   }
 
   async function handleGerarRelatorio() {
-    if (!data || !stationId || !month) return;
+    if (!data || !selectedUc || !month) return;
     setGerando(true);
     setGerarError(null);
 
-    const result = await gerarRelatorioSolis(stationId, month, data);
+    // Usa o primeiro station_id como referência
+    const primaryStation = selectedUc.stations[0]?.station_id;
+    if (!primaryStation) {
+      setGerarError("Nenhum station_id vinculado a esta UC.");
+      setGerando(false);
+      return;
+    }
+
+    const result = await gerarRelatorioSolis(primaryStation, month, data);
 
     if (result.error) {
       setGerarError(result.error);
@@ -110,6 +169,7 @@ export function SolisGeracaoMensal({ usinas }: Props) {
   }));
 
   const mediaDiaria = data?.metricas.media_diaria_kwh ?? 0;
+  const isMultiProvider = selectedUc && selectedUc.stations.length > 1;
 
   return (
     <div className="space-y-6">
@@ -124,22 +184,24 @@ export function SolisGeracaoMensal({ usinas }: Props) {
         <CardContent>
           <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-2">
-              <Label>Provedor</Label>
-              <ProviderFilterTabs value={providerFilter} onChange={(v) => { setProviderFilter(v); setData(null); }} />
+              <Label>Empresa</Label>
+              <Combobox
+                options={empresaOptions}
+                value={empresaId}
+                onChange={handleEmpresaChange}
+                placeholder="Todas as empresas"
+                className="w-64"
+              />
             </div>
             <div className="space-y-2">
-              <Label>Usina</Label>
-              <select
-                value={stationId}
-                onChange={(e) => setStationId(e.target.value)}
-                className="flex h-8 w-64 items-center rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-              >
-                {usinasFiltradas.map((u) => (
-                  <option key={u.station_id} value={u.station_id}>
-                    [{u.provider === "solis" ? "Solis" : "SunGrow"}] {u.station_name} ({u.potencia_instalada_kwp} kWp)
-                  </option>
-                ))}
-              </select>
+              <Label>UC / Usina</Label>
+              <Combobox
+                options={ucOptions}
+                value={ucId}
+                onChange={setUcId}
+                placeholder="Selecionar UC..."
+                className="w-72"
+              />
             </div>
             <div className="space-y-2">
               <Label>Mês</Label>
@@ -150,7 +212,7 @@ export function SolisGeracaoMensal({ usinas }: Props) {
                 className="w-44"
               />
             </div>
-            <Button onClick={handleBuscar} disabled={loading || !stationId}>
+            <Button onClick={handleBuscar} disabled={loading || !ucId}>
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -164,6 +226,24 @@ export function SolisGeracaoMensal({ usinas }: Props) {
               )}
             </Button>
           </div>
+          {selectedUc && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <Building2 className="h-3.5 w-3.5" />
+              <span>{selectedUc.empresaNome}</span>
+              <span>·</span>
+              {selectedUc.stations.map((s) => (
+                <Badge key={s.station_id} variant="outline" className="text-[10px]">
+                  {s.provider === "solis" ? "Solis" : "SunGrow"}
+                </Badge>
+              ))}
+              {isMultiProvider && (
+                <Badge variant="secondary" className="text-[10px]">
+                  <Zap className="mr-0.5 h-3 w-3" />
+                  Multi-provedor
+                </Badge>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -189,10 +269,18 @@ export function SolisGeracaoMensal({ usinas }: Props) {
                 &middot; {data.periodo.data_inicio_br} a {data.periodo.data_fim_br}
               </p>
             </div>
-            <Badge variant="outline" className="text-sm">
-              <Calendar className="mr-1.5 h-3.5 w-3.5" />
-              {data.periodo.dias_com_dados}/{data.periodo.dias_do_mes} dias
-            </Badge>
+            <div className="flex items-center gap-2">
+              {isMultiProvider && (
+                <Badge variant="secondary" className="text-sm">
+                  <Zap className="mr-1 h-3.5 w-3.5" />
+                  Consolidado
+                </Badge>
+              )}
+              <Badge variant="outline" className="text-sm">
+                <Calendar className="mr-1.5 h-3.5 w-3.5" />
+                {data.periodo.dias_com_dados}/{data.periodo.dias_do_mes} dias
+              </Badge>
+            </div>
           </div>
 
           {/* KPI Cards */}
@@ -282,27 +370,57 @@ export function SolisGeracaoMensal({ usinas }: Props) {
               <CardContent className="flex items-center gap-4 p-4">
                 <Activity className="h-5 w-5 shrink-0 text-blue-500" />
                 <div>
-                  <p className="text-xs text-muted-foreground">PR médio</p>
-                  <p className="text-sm font-semibold">
-                    {data.metricas.pr_medio.toFixed(2)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Min: {data.metricas.pr_min.toFixed(2)} — Max: {data.metricas.pr_max.toFixed(2)}
-                  </p>
+                  <p className="text-xs text-muted-foreground">Performance (PR)</p>
+                  {prPercent != null ? (
+                    <>
+                      <p className="text-sm font-semibold">
+                        {Math.round(prPercent)}%{" "}
+                        <span className={`text-xs font-medium ${
+                          classificarDesempenho(prPercent) === "bom" ? "text-green-600" :
+                          classificarDesempenho(prPercent) === "regular" ? "text-amber-600" :
+                          "text-red-600"
+                        }`}>
+                          {classificarDesempenho(prPercent) === "bom" ? "Bom" :
+                           classificarDesempenho(prPercent) === "regular" ? "Regular" : "Ruim"}
+                        </span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {Math.round(prPercent)}% do potencial atingido
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-semibold text-muted-foreground">—</p>
+                      <p className="text-xs text-muted-foreground">
+                        Preencha os parâmetros de estimativa da UC
+                      </p>
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="flex items-center gap-4 p-4">
-                <AlertCircle className="h-5 w-5 shrink-0 text-amber-500" />
+                <Target className="h-5 w-5 shrink-0 text-amber-500" />
                 <div>
-                  <p className="text-xs text-muted-foreground">Dias abaixo PR 1.0</p>
-                  <p className="text-sm font-semibold">
-                    {data.metricas.dias_abaixo_pr1} dia{data.metricas.dias_abaixo_pr1 !== 1 && "s"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Mediana: {formatKwh(data.metricas.mediana_diaria_kwh)} kWh/dia
-                  </p>
+                  <p className="text-xs text-muted-foreground">Geração estimada</p>
+                  {geracaoEstimada != null ? (
+                    <>
+                      <p className="text-sm font-semibold">
+                        {formatKwh(geracaoEstimada)} kWh
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Real: {formatKwh(data.totais.geracao_kwh)} kWh
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-semibold text-muted-foreground">—</p>
+                      <p className="text-xs text-muted-foreground">
+                        Yield: {data.metricas.pr_medio.toFixed(2)} kWh/kWp/dia
+                      </p>
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>

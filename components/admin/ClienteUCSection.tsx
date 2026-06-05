@@ -77,7 +77,11 @@ export function ClienteUCSection({
             <p className="text-sm font-medium text-foreground">
               Selecione uma usina para vincular como UC deste cliente:
             </p>
-            <VincularSolisUC usinas={usinasDisponiveis} empresaId={empresaId} />
+            <VincularSolisUC
+              usinas={usinasDisponiveis}
+              empresaId={empresaId}
+              ucsExistentes={unidades.map((uc) => ({ id: uc.id, codigo_uc: uc.codigo_uc }))}
+            />
           </div>
         )}
 

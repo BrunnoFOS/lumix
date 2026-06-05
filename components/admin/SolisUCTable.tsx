@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Radio,
   AlertCircle,
@@ -15,6 +16,7 @@ import {
   LinkIcon,
   Loader2,
   Save,
+  ExternalLink,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -197,21 +199,17 @@ function TarifaDialog({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Grupo tarifário</Label>
-              <select
+              <Combobox
+                options={GRUPOS.map((g) => ({ value: g.value, label: g.label }))}
                 value={grupo}
-                onChange={(e) => {
-                  setGrupo(e.target.value);
+                onChange={(v) => {
+                  setGrupo(v);
                   setSubgrupo("");
-                  setConcessionaria(e.target.value === "acl" ? "ACL" : "");
+                  setConcessionaria(v === "acl" ? "ACL" : "");
                   setModalidade("");
                 }}
-                className={selectClass}
-              >
-                <option value="">Selecione</option>
-                {GRUPOS.map((g) => (
-                  <option key={g.value} value={g.value}>{g.label}</option>
-                ))}
-              </select>
+                placeholder="Selecione"
+              />
             </div>
 
             <div className="space-y-2">
@@ -412,12 +410,23 @@ export function SolisUCTable({
                     )}
                   </TableCell>
                   <TableCell>
-                    <button
-                      onClick={() => setSelectedUC(uc)}
-                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-accent transition-colors"
-                    >
-                      <Settings className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {vinc && (
+                        <Link
+                          href={`/admin/unidades/${vinc.ucId}`}
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
+                          title="Detalhes da UC"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </Link>
+                      )}
+                      <button
+                        onClick={() => setSelectedUC(uc)}
+                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-accent transition-colors"
+                      >
+                        <Settings className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </TableCell>
                 </TableRow>
               );

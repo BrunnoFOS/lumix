@@ -3,27 +3,16 @@ import { getRelatorios } from "@/lib/actions/relatorios";
 import { RelatorioSearch } from "@/components/admin/RelatorioSearch";
 import { RelatorioPageClient } from "@/components/admin/RelatorioPageClient";
 import { SolisGeracaoMensal } from "@/components/admin/SolisGeracaoMensal";
-import type { UsinaComProvider } from "@/components/admin/SolisGeracaoMensal";
 import { createServerClient } from "@/lib/supabase/server";
-import { fetchSolisUCs, fetchSungrowUCs, getUCsComSolis } from "@/lib/actions/solis";
+import { getUCsComSolis } from "@/lib/actions/solis";
+import { getUCsComStations } from "@/lib/actions/unidades";
+import { getEmpresas } from "@/lib/actions/empresas";
 
 interface Props {
   searchParams: Promise<{ search?: string; status?: string }>;
 }
 
-export default async function RelatoriosPage({ searchParams }: Props) {
-  const params = await searchParams;
-  const [relatorios, solisUCs, sungrowUCs] = await Promise.all([
-    getRelatorios(params.search, params.status),
-    fetchSolisUCs(),
-    fetchSungrowUCs(),
-  ]);
-
-  const todasUsinas: UsinaComProvider[] = [
-    ...solisUCs.data.map((u) => ({ ...u, provider: "solis" as const })),
-    ...sungrowUCs.data.map((u) => ({ ...u, provider: "sungrow" as const })),
-  ];
-
+async function fetchDbUcs() {
   const supabase = await createServerClient();
   const { data: rawUcs } = await supabase
     .from("unidades_consumidoras")
@@ -31,7 +20,7 @@ export default async function RelatoriosPage({ searchParams }: Props) {
     .eq("ativa", true)
     .order("codigo_uc");
 
-  const dbUcs = (rawUcs ?? []).map((uc) => {
+  return (rawUcs ?? []).map((uc) => {
     const empresaRaw = uc.empresa as unknown;
     return {
       id: uc.id,
@@ -39,8 +28,20 @@ export default async function RelatoriosPage({ searchParams }: Props) {
       empresa: (Array.isArray(empresaRaw) ? empresaRaw[0] ?? null : empresaRaw) as { id: string; nome: string } | null,
     };
   });
+}
+
+export default async function RelatoriosPage({ searchParams }: Props) {
+  const params = await searchParams;
+  const [relatorios, empresas, ucsComStations, dbUcs] = await Promise.all([
+    getRelatorios(params.search, params.status),
+    getEmpresas(),
+    getUCsComStations(),
+    fetchDbUcs(),
+  ]);
 
   const ucs = await getUCsComSolis(dbUcs);
+
+  const empresasOptions = empresas.map((e) => ({ id: e.id, nome: e.nome }));
 
   return (
     <div className="space-y-6">
@@ -52,8 +53,8 @@ export default async function RelatoriosPage({ searchParams }: Props) {
       </div>
 
       {/* Geração mensal */}
-      {todasUsinas.length > 0 && (
-        <SolisGeracaoMensal usinas={todasUsinas} />
+      {ucsComStations.length > 0 && (
+        <SolisGeracaoMensal empresas={empresasOptions} ucs={ucsComStations} />
       )}
 
       <Suspense>

@@ -58,6 +58,7 @@ interface RelatorioRow {
   indice_performance: string | null;
   status_envio: string;
   gerado_por: string;
+  tipo_relatorio: string;
   pdf_url: string | null;
   uc: { id: string; codigo_uc: string } | null;
   empresa: { id: string; nome: string } | null;
@@ -215,6 +216,7 @@ export function RelatorioTable({
             <TableRow>
               <TableHead>Cliente</TableHead>
               <TableHead>UC</TableHead>
+              <TableHead>Tipo</TableHead>
               <TableHead>Mês ref.</TableHead>
               <TableHead className="text-right">Geração</TableHead>
               <TableHead className="text-right">Economia</TableHead>
@@ -233,6 +235,18 @@ export function RelatorioTable({
                     {rel.empresa?.nome || "—"}
                   </TableCell>
                   <TableCell>{rel.uc?.codigo_uc || "—"}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={
+                        rel.tipo_relatorio === "real"
+                          ? "border-green-200 bg-green-50 text-green-700"
+                          : "border-amber-200 bg-amber-50 text-amber-700"
+                      }
+                    >
+                      {rel.tipo_relatorio === "real" ? "Real" : "Estimado"}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="capitalize">
                     {formatMesReferencia(rel.mes_referencia)}
                   </TableCell>
@@ -247,19 +261,33 @@ export function RelatorioTable({
                       : "—"}
                   </TableCell>
                   <TableCell>
-                    {rel.indice_performance ? (
-                      <Badge
-                        variant={
-                          PERFORMANCE_VARIANT[rel.indice_performance] ||
-                          "outline"
-                        }
-                      >
-                        {PERFORMANCE_LABELS[rel.indice_performance] ||
-                          rel.indice_performance}
-                      </Badge>
-                    ) : (
-                      "—"
-                    )}
+                    {(() => {
+                      const hasPR = rel.geracao_kwh != null && rel.geracao_estimada_kwh != null && rel.geracao_estimada_kwh > 0;
+                      if (!hasPR && !rel.indice_performance) return "—";
+
+                      const pr = hasPR ? (rel.geracao_kwh! / rel.geracao_estimada_kwh!) * 100 : null;
+                      const prRounded = pr != null ? Math.round(pr) : null;
+                      const classificacao = pr != null
+                        ? (pr >= 98 ? "bom" : pr >= 90 ? "regular" : "ruim")
+                        : rel.indice_performance;
+
+                      return (
+                        <div className="flex flex-col gap-0.5">
+                          {prRounded != null && (
+                            <span className="text-sm font-medium tabular-nums">
+                              PR {prRounded}%
+                            </span>
+                          )}
+                          {classificacao && (
+                            <Badge
+                              variant={PERFORMANCE_VARIANT[classificacao] || "outline"}
+                            >
+                              {PERFORMANCE_LABELS[classificacao] || classificacao}
+                            </Badge>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell>
                     <Badge

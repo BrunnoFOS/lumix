@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -11,6 +11,7 @@ import {
   Check,
   X,
   Loader2,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,21 @@ export function GrupoPageClient({ grupos }: { grupos: GrupoComEmpresas[] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editNome, setEditNome] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [busca, setBusca] = useState("");
+
+  const gruposFiltrados = useMemo(() => {
+    if (!busca.trim()) return grupos;
+    const termo = busca.toLowerCase();
+    return grupos.filter(
+      (g) =>
+        g.nome.toLowerCase().includes(termo) ||
+        g.empresas.some(
+          (e) =>
+            e.nome.toLowerCase().includes(termo) ||
+            e.cnpj.includes(termo)
+        )
+    );
+  }, [grupos, busca]);
 
   async function handleCriar() {
     if (!novoNome.trim()) return;
@@ -67,6 +83,17 @@ export function GrupoPageClient({ grupos }: { grupos: GrupoComEmpresas[] }) {
 
   return (
     <div className="space-y-4">
+      {/* Busca */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Buscar por nome do grupo, empresa ou CNPJ..."
+          className="pl-9"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+        />
+      </div>
+
       {/* Botão criar */}
       {!criando ? (
         <div className="flex justify-end">
@@ -97,7 +124,7 @@ export function GrupoPageClient({ grupos }: { grupos: GrupoComEmpresas[] }) {
       )}
 
       {/* Lista de grupos */}
-      {grupos.length === 0 && !criando && (
+      {gruposFiltrados.length === 0 && !criando && (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-12">
           <Users className="h-10 w-10 text-muted-foreground/40" />
           <p className="mt-3 text-sm text-muted-foreground">
@@ -106,7 +133,7 @@ export function GrupoPageClient({ grupos }: { grupos: GrupoComEmpresas[] }) {
         </div>
       )}
 
-      {grupos.map((grupo) => (
+      {gruposFiltrados.map((grupo) => (
         <Card key={grupo.id}>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">

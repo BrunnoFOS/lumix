@@ -393,7 +393,155 @@ export async function fetchGeracaoMensal(
   return fetchSolisGeracaoMensal(stationId, month);
 }
 
+// ——— Busca consolidada de múltiplos provedores ———
+
+export async function fetchGeracaoMensalConsolidada(
+  stations: { station_id: string; provider: "solis" | "sungrow" }[],
+  month: string
+): Promise<{ data: SolisGeracaoMensal | null; error?: string }> {
+  if (stations.length === 0) {
+    return { data: null, error: "Nenhum station_id informado." };
+  }
+
+  // Caso simples: apenas um provedor
+  if (stations.length === 1) {
+    return fetchGeracaoMensal(stations[0].station_id, month, stations[0].provider);
+  }
+
+  // Buscar dados de todos os provedores em paralelo
+  const results = await Promise.all(
+    stations.map((s) => fetchGeracaoMensal(s.station_id, month, s.provider))
+  );
+
+  // Filtrar os que retornaram dados
+  const successResults = results
+    .map((r) => r.data)
+    .filter((d): d is SolisGeracaoMensal => d !== null);
+
+  if (successResults.length === 0) {
+    const errors = results.map((r) => r.error).filter(Boolean).join("; ");
+    return { data: null, error: errors || "Nenhum provedor retornou dados." };
+  }
+
+  // Se só um retornou, usar diretamente
+  if (successResults.length === 1) {
+    return { data: successResults[0] };
+  }
+
+  // Consolidar: usar o primeiro como base e somar os demais
+  const base = successResults[0];
+  const consolidated = structuredClone(base);
+
+  // Nome consolidado
+  const allNames = successResults.map((r) => r.usina.station_name);
+  const uniqueNames = [...new Set(allNames)];
+  consolidated.usina.station_name = uniqueNames.length === 1
+    ? uniqueNames[0]
+    : uniqueNames.join(" + ");
+
+  // Somar potências
+  consolidated.usina.capacity_kwp = successResults.reduce(
+    (sum, r) => sum + r.usina.capacity_kwp, 0
+  );
+
+  // Consolidar dias: agrupar por data e somar kWh
+  const diasMap = new Map<string, SolisGeracaoDia>();
+  for (const result of successResults) {
+    for (const dia of result.dias) {
+      const existing = diasMap.get(dia.date);
+      if (existing) {
+        existing.geracao_kwh += dia.geracao_kwh;
+        // PR ponderado não é simples de somar — usamos média
+        existing.performance_ratio = (existing.performance_ratio + dia.performance_ratio) / 2;
+      } else {
+        diasMap.set(dia.date, { ...dia });
+      }
+    }
+  }
+
+  consolidated.dias = Array.from(diasMap.values()).sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
+
+  // Recalcular totais
+  consolidated.totais.geracao_kwh = successResults.reduce(
+    (sum, r) => sum + r.totais.geracao_kwh, 0
+  );
+  consolidated.totais.grid_sell_kwh = successResults.reduce(
+    (sum, r) => sum + r.totais.grid_sell_kwh, 0
+  );
+  consolidated.totais.grid_purchased_kwh = successResults.reduce(
+    (sum, r) => sum + r.totais.grid_purchased_kwh, 0
+  );
+  consolidated.totais.home_load_kwh = successResults.reduce(
+    (sum, r) => sum + r.totais.home_load_kwh, 0
+  );
+
+  // Recalcular métricas a partir dos dias consolidados
+  const dias = consolidated.dias;
+  const totalKwh = dias.reduce((s, d) => s + d.geracao_kwh, 0);
+  const diasComDados = dias.filter((d) => d.geracao_kwh > 0).length;
+
+  consolidated.periodo.dias_com_dados = Math.max(
+    ...successResults.map((r) => r.periodo.dias_com_dados)
+  );
+
+  const mediaDiaria = diasComDados > 0 ? totalKwh / diasComDados : 0;
+  const sorted = [...dias].sort((a, b) => a.geracao_kwh - b.geracao_kwh);
+  const melhorDia = sorted[sorted.length - 1] ?? dias[0];
+  const piorDiaPositivo = sorted.find((d) => d.geracao_kwh > 0) ?? sorted[0];
+
+  consolidated.metricas = {
+    media_diaria_kwh: mediaDiaria,
+    mediana_diaria_kwh: diasComDados > 0
+      ? sorted[Math.floor(sorted.length / 2)].geracao_kwh
+      : 0,
+    melhor_dia: {
+      date: melhorDia.date,
+      date_br: melhorDia.date_br,
+      geracao_kwh: melhorDia.geracao_kwh,
+    },
+    pior_dia: {
+      date: piorDiaPositivo.date,
+      date_br: piorDiaPositivo.date_br,
+      geracao_kwh: piorDiaPositivo.geracao_kwh,
+    },
+    pr_medio: dias.length > 0
+      ? dias.reduce((s, d) => s + d.performance_ratio, 0) / dias.length
+      : 0,
+    pr_max: Math.max(...dias.map((d) => d.performance_ratio), 0),
+    pr_min: Math.min(...dias.filter((d) => d.geracao_kwh > 0).map((d) => d.performance_ratio), 0),
+    dias_abaixo_pr1: dias.filter((d) => d.geracao_kwh > 0 && d.performance_ratio < 1).length,
+  };
+
+  // Recalcular projeção
+  const diasDoMes = consolidated.periodo.dias_do_mes;
+  consolidated.projecao = {
+    kwh_mes_completo: diasComDados > 0
+      ? (totalKwh / diasComDados) * diasDoMes
+      : 0,
+    completude_pct: diasDoMes > 0
+      ? Math.round((diasComDados / diasDoMes) * 100)
+      : 0,
+  };
+
+  return { data: consolidated };
+}
+
 // ——— Gerar relatório via n8n ———
+
+// Gerar relatório consolidado (múltiplos provedores)
+export async function gerarRelatorioConsolidado(
+  stations: { station_id: string; provider: "solis" | "sungrow" }[],
+  month: string,
+  dadosGeracao: SolisGeracaoMensal
+): Promise<{ error?: string; success?: boolean }> {
+  // Usa o primeiro station_id como referência principal e envia dados já consolidados
+  const primaryStationId = stations[0]?.station_id;
+  if (!primaryStationId) return { error: "Nenhum station_id informado." };
+
+  return gerarRelatorioSolis(primaryStationId, month, dadosGeracao);
+}
 
 export async function gerarRelatorioSolis(
   stationId: string,
@@ -405,6 +553,203 @@ export async function gerarRelatorioSolis(
 
   if (!user || !password) {
     return { error: "Variáveis de ambiente N8N não configuradas." };
+  }
+
+  // Buscar UC vinculada para calcular geração estimada, PR% e tarifas
+  const supabase = await createServerClient();
+  const { calcularGeracaoEstimadaUC } = await import("@/lib/actions/geracao-estimada");
+  const { classificarDesempenho } = await import("@/lib/geracao-estimada");
+  const { lookupTarifasUC } = await import("@/lib/actions/tarifas-aneel");
+  const { getImpostoVigente } = await import("@/lib/actions/impostos");
+
+  let estimativa: {
+    geracao_estimada_kwh: number | null;
+    pr_percentual: number | null;
+    pr_classificacao: string | null;
+    pr_texto: string | null;
+    degradacao_acumulada: number | null;
+    ghi_wh_m2_dia: number | null;
+  } = {
+    geracao_estimada_kwh: null,
+    pr_percentual: null,
+    pr_classificacao: null,
+    pr_texto: null,
+    degradacao_acumulada: null,
+    ghi_wh_m2_dia: null,
+  };
+
+  let ucInfo: {
+    grupo_tarifario: string | null;
+    subgrupo: string | null;
+    concessionaria_sigla: string | null;
+    modalidade_tarifaria_aneel: string | null;
+    contrato_acl_rs_mwh: number | null;
+    codigo_uc: string | null;
+  } = {
+    grupo_tarifario: null,
+    subgrupo: null,
+    concessionaria_sigla: null,
+    modalidade_tarifaria_aneel: null,
+    contrato_acl_rs_mwh: null,
+    codigo_uc: null,
+  };
+
+  let tarifas: {
+    grupo: string;
+    tusd?: number;
+    te?: number;
+    tusd_ponta?: number;
+    te_ponta?: number;
+    tusd_fora_ponta?: number;
+    te_fora_ponta?: number;
+  } | null = null;
+
+  let economia: {
+    economia_estimada_rs: number | null;
+    formula: string | null;
+  } = { economia_estimada_rs: null, formula: null };
+
+  let impostos: {
+    icms_aliquota: number | null;
+    pis_aliquota: number | null;
+    cofins_aliquota: number | null;
+    fator_imposto: number | null;
+  } = { icms_aliquota: null, pis_aliquota: null, cofins_aliquota: null, fator_imposto: null };
+
+  let tarifas_com_impostos: {
+    tusd?: number;
+    te?: number;
+    tusd_fora_ponta?: number;
+    te_fora_ponta?: number;
+    tusd_ponta?: number;
+    te_ponta?: number;
+  } | null = null;
+
+  // Buscar UC pelo station_id (via uc_stations ou legado)
+  const { data: link } = await supabase
+    .from("uc_stations")
+    .select("uc_id")
+    .eq("station_id", stationId)
+    .maybeSingle();
+
+  let ucId = link?.uc_id;
+  if (!ucId) {
+    const { data: ucLegado } = await supabase
+      .from("unidades_consumidoras")
+      .select("id")
+      .eq("station_id", stationId)
+      .maybeSingle();
+    ucId = ucLegado?.id;
+  }
+
+  if (ucId) {
+    const mesRef = `${month}-01`;
+    const geracaoReal = dadosGeracao.totais.geracao_kwh;
+
+    // Buscar dados da UC
+    const { data: ucData } = await supabase
+      .from("unidades_consumidoras")
+      .select("codigo_uc, grupo_tarifario, subgrupo, concessionaria_sigla, modalidade_tarifaria_aneel, contrato_acl_rs_mwh")
+      .eq("id", ucId)
+      .single();
+
+    if (ucData) {
+      ucInfo = {
+        grupo_tarifario: ucData.grupo_tarifario,
+        subgrupo: ucData.subgrupo,
+        concessionaria_sigla: ucData.concessionaria_sigla,
+        modalidade_tarifaria_aneel: ucData.modalidade_tarifaria_aneel,
+        contrato_acl_rs_mwh: ucData.contrato_acl_rs_mwh ? Number(ucData.contrato_acl_rs_mwh) : null,
+        codigo_uc: ucData.codigo_uc,
+      };
+
+      // Buscar tarifas ANEEL e impostos vigentes no mês de referência
+      if (ucData.concessionaria_sigla && ucData.subgrupo && ucData.grupo_tarifario) {
+        const [tarifasResult, impostoResult] = await Promise.all([
+          lookupTarifasUC(
+            ucData.concessionaria_sigla,
+            ucData.subgrupo,
+            ucData.modalidade_tarifaria_aneel,
+            ucData.grupo_tarifario,
+            mesRef
+          ),
+          getImpostoVigente(ucData.concessionaria_sigla, mesRef),
+        ]);
+
+        if (tarifasResult) {
+          tarifas = tarifasResult;
+        }
+
+        // Fator de impostos (1 se não houver cadastro)
+        const fator = impostoResult?.fator_imposto ?? 1;
+        if (impostoResult) {
+          impostos = {
+            icms_aliquota: impostoResult.icms_aliquota,
+            pis_aliquota: impostoResult.pis_aliquota,
+            cofins_aliquota: impostoResult.cofins_aliquota,
+            fator_imposto: impostoResult.fator_imposto,
+          };
+        }
+
+        if (tarifasResult) {
+          // Calcular economia estimada por grupo com impostos
+          if (tarifasResult.grupo === "grupo_b" && tarifasResult.tusd != null && tarifasResult.te != null) {
+            // Grupo B: tarifa única (TUSD + TE) × fator imposto
+            const tusdImp = tarifasResult.tusd * fator;
+            const teImp = tarifasResult.te * fator;
+            const tarifa = tusdImp + teImp;
+            tarifas_com_impostos = { tusd: tusdImp, te: teImp };
+            economia = {
+              economia_estimada_rs: Math.round(geracaoReal * tarifa * 100) / 100,
+              formula: `${geracaoReal.toFixed(1)} kWh × R$ ${tarifa.toFixed(6)}/kWh (TUSD + TE com impostos, fator ${fator.toFixed(4)})`,
+            };
+          } else if (tarifasResult.grupo === "acl" && tarifasResult.tusd_fora_ponta != null && ucData.contrato_acl_rs_mwh) {
+            // ACL: TUSD_fp × fator imposto + contrato ACL (já inclui impostos próprios)
+            const tusdFpImp = tarifasResult.tusd_fora_ponta * fator;
+            const contratoKwh = Number(ucData.contrato_acl_rs_mwh) / 1000;
+            const tarifa = tusdFpImp + contratoKwh;
+            tarifas_com_impostos = { tusd_fora_ponta: tusdFpImp };
+            economia = {
+              economia_estimada_rs: Math.round(geracaoReal * tarifa * 100) / 100,
+              formula: `${geracaoReal.toFixed(1)} kWh × R$ ${tarifa.toFixed(6)}/kWh (TUSD_fp com impostos + Contrato ACL R$ ${contratoKwh.toFixed(6)}/kWh)`,
+            };
+          } else if (tarifasResult.tusd_fora_ponta != null && tarifasResult.te_fora_ponta != null) {
+            // Grupo A: fora ponta × fator imposto
+            const tusdFpImp = tarifasResult.tusd_fora_ponta * fator;
+            const teFpImp = tarifasResult.te_fora_ponta * fator;
+            const tarifa = tusdFpImp + teFpImp;
+            tarifas_com_impostos = {
+              tusd_fora_ponta: tusdFpImp,
+              te_fora_ponta: teFpImp,
+              tusd_ponta: tarifasResult.tusd_ponta ? tarifasResult.tusd_ponta * fator : undefined,
+              te_ponta: tarifasResult.te_ponta ? tarifasResult.te_ponta * fator : undefined,
+            };
+            economia = {
+              economia_estimada_rs: Math.round(geracaoReal * tarifa * 100) / 100,
+              formula: `${geracaoReal.toFixed(1)} kWh × R$ ${tarifa.toFixed(6)}/kWh (TUSD_fp + TE_fp com impostos, fator ${fator.toFixed(4)})`,
+            };
+          }
+        }
+      }
+    }
+
+    // Calcular estimativa e PR
+    const resultado = await calcularGeracaoEstimadaUC(ucId, mesRef, geracaoReal);
+
+    if ("data" in resultado) {
+      const pr = resultado.data.pr_percent ?? null;
+      const classificacao = pr != null ? classificarDesempenho(pr) : null;
+      const classificacaoLabel = classificacao === "bom" ? "Bom" : classificacao === "regular" ? "Regular" : classificacao === "ruim" ? "Ruim" : null;
+
+      estimativa = {
+        geracao_estimada_kwh: resultado.data.geracao_estimada_kwh,
+        pr_percentual: pr != null ? Math.round(pr * 100) / 100 : null,
+        pr_classificacao: classificacaoLabel,
+        pr_texto: pr != null ? `${Math.round(pr)}% do potencial da usina foi atingido — ${classificacaoLabel}` : null,
+        degradacao_acumulada: resultado.data.degradacao_acumulada,
+        ghi_wh_m2_dia: resultado.data.ghi_wh_m2_dia,
+      };
+    }
   }
 
   try {
@@ -422,6 +767,12 @@ export async function gerarRelatorioSolis(
           station_id: stationId,
           month,
           ...dadosGeracao,
+          estimativa,
+          uc_info: ucInfo,
+          tarifas,
+          tarifas_com_impostos,
+          impostos,
+          economia,
         }),
       }
     );
@@ -436,6 +787,55 @@ export async function gerarRelatorioSolis(
   } catch (err) {
     return { error: `Erro de conexão ao gerar relatório: ${err instanceof Error ? err.message : String(err)}` };
   }
+}
+
+// ——— Buscar stations irmãos (mesma UC) via uc_stations ———
+
+export async function getStationsSiblings(
+  stationId: string
+): Promise<{ station_id: string; provider: "solis" | "sungrow" }[]> {
+  const supabase = await createServerClient();
+
+  // Buscar a UC desse station_id
+  const { data: link } = await supabase
+    .from("uc_stations")
+    .select("uc_id")
+    .eq("station_id", stationId)
+    .maybeSingle();
+
+  if (!link) return [{ station_id: stationId, provider: "solis" }];
+
+  // Buscar todos os stations dessa UC
+  const { data: siblings } = await supabase
+    .from("uc_stations")
+    .select("station_id, provider")
+    .eq("uc_id", link.uc_id);
+
+  if (!siblings || siblings.length === 0) {
+    return [{ station_id: stationId, provider: "solis" }];
+  }
+
+  return siblings as { station_id: string; provider: "solis" | "sungrow" }[];
+}
+
+// ——— Busca de geração com consolidação automática ———
+
+export async function fetchGeracaoMensalAuto(
+  stationId: string,
+  month: string,
+  provider: "solis" | "sungrow"
+): Promise<{ data: SolisGeracaoMensal | null; error?: string; isConsolidated?: boolean }> {
+  // Verificar se este station tem "irmãos" na mesma UC
+  const siblings = await getStationsSiblings(stationId);
+
+  if (siblings.length <= 1) {
+    // Sem consolidação necessária
+    return fetchGeracaoMensal(stationId, month, provider);
+  }
+
+  // Buscar consolidado
+  const result = await fetchGeracaoMensalConsolidada(siblings, month);
+  return { ...result, isConsolidated: true };
 }
 
 // ——— UCs unificadas (banco + Solis) para selectors ———

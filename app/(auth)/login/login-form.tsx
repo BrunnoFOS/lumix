@@ -2,7 +2,6 @@
 
 import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,14 +62,6 @@ export function LoginForm() {
           <Button type="submit" className="w-full" disabled={isPending}>
             {isPending ? "Entrando..." : "Entrar"}
           </Button>
-          <div className="flex justify-between text-sm w-full">
-            <Link href="/reset-password" className="text-primary hover:underline">
-              Esqueci minha senha
-            </Link>
-            <Link href="/signup" className="text-primary hover:underline">
-              Criar conta
-            </Link>
-          </div>
         </CardFooter>
       </form>
     </Card>

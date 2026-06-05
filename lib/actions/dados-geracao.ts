@@ -96,8 +96,8 @@ export async function getResumoGeracaoCliente(empresaIds: string | string[], mes
 
   let performance: string | null = null;
   if (avgRatio !== null) {
-    if (avgRatio >= 80) performance = "bom";
-    else if (avgRatio >= 60) performance = "regular";
+    if (avgRatio >= 98) performance = "bom";
+    else if (avgRatio >= 90) performance = "regular";
     else performance = "ruim";
   }
 

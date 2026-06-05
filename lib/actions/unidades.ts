@@ -62,6 +62,9 @@ export async function createUC(formData: FormData): Promise<ActionResult> {
       potencia_inversor_kw: parseDecimal(formData.get("potencia_inversor_kw") as string),
       data_instalacao: (formData.get("data_instalacao") as string) || null,
       geracao_estimada_mensal_kwh: parseDecimal(formData.get("geracao_estimada_mensal_kwh") as string),
+      fator_rendimento: parseDecimal(formData.get("fator_rendimento") as string),
+      degradacao_ano_zero: parseDecimal(formData.get("degradacao_ano_zero") as string),
+      degradacao_anos_seguintes: parseDecimal(formData.get("degradacao_anos_seguintes") as string),
       station_id: (formData.get("station_id") as string) || null,
       observacoes: (formData.get("observacoes") as string) || null,
     })
@@ -118,6 +121,9 @@ export async function updateUC(
       potencia_inversor_kw: parseDecimal(formData.get("potencia_inversor_kw") as string),
       data_instalacao: (formData.get("data_instalacao") as string) || null,
       geracao_estimada_mensal_kwh: parseDecimal(formData.get("geracao_estimada_mensal_kwh") as string),
+      fator_rendimento: parseDecimal(formData.get("fator_rendimento") as string),
+      degradacao_ano_zero: parseDecimal(formData.get("degradacao_ano_zero") as string),
+      degradacao_anos_seguintes: parseDecimal(formData.get("degradacao_anos_seguintes") as string),
       observacoes: (formData.get("observacoes") as string) || null,
     })
     .eq("id", id)
@@ -145,21 +151,40 @@ export async function criarOuAtualizarUCTarifaria(
 ): Promise<ActionResult> {
   const supabase = await createServerClient();
 
-  // Buscar UC existente com esse station_id
-  const { data: existing } = await supabase
-    .from("unidades_consumidoras")
-    .select("id")
+  // Buscar UC vinculada via uc_stations
+  const { data: link } = await supabase
+    .from("uc_stations")
+    .select("uc_id")
     .eq("station_id", stationId)
     .maybeSingle();
 
-  if (!existing) {
-    return { error: "Vincule esta usina a um cliente antes de configurar a tarifa." };
+  if (!link) {
+    // Fallback: buscar pelo campo legado station_id na UC
+    const { data: existing } = await supabase
+      .from("unidades_consumidoras")
+      .select("id")
+      .eq("station_id", stationId)
+      .maybeSingle();
+
+    if (!existing) {
+      return { error: "Vincule esta usina a um cliente antes de configurar a tarifa." };
+    }
+
+    const { error } = await supabase
+      .from("unidades_consumidoras")
+      .update(data)
+      .eq("id", existing.id);
+
+    if (error) return { error: "Erro ao atualizar classificação tarifária." };
+
+    revalidatePath("/admin/unidades");
+    return {};
   }
 
   const { error } = await supabase
     .from("unidades_consumidoras")
     .update(data)
-    .eq("id", existing.id);
+    .eq("id", link.uc_id);
 
   if (error) return { error: "Erro ao atualizar classificação tarifária." };
 
@@ -174,6 +199,7 @@ export async function updateClassificacaoTarifaria(
     subgrupo: string | null;
     concessionaria_sigla: string | null;
     modalidade_tarifaria_aneel: string | null;
+    contrato_acl_rs_mwh?: number | null;
   }
 ): Promise<ActionResult> {
   const supabase = await createServerClient();
@@ -185,6 +211,30 @@ export async function updateClassificacaoTarifaria(
 
   if (error) {
     return { error: "Erro ao atualizar classificação tarifária." };
+  }
+
+  revalidatePath("/admin/unidades");
+  revalidatePath(`/admin/unidades/${id}`);
+  return {};
+}
+
+export async function updateParametrosEstimativa(
+  id: string,
+  dados: {
+    fator_rendimento: number | null;
+    degradacao_ano_zero: number | null;
+    degradacao_anos_seguintes: number | null;
+  }
+): Promise<ActionResult> {
+  const supabase = await createServerClient();
+
+  const { error } = await supabase
+    .from("unidades_consumidoras")
+    .update(dados)
+    .eq("id", id);
+
+  if (error) {
+    return { error: "Erro ao atualizar parâmetros de estimativa." };
   }
 
   revalidatePath("/admin/unidades");
@@ -254,7 +304,7 @@ export async function getUCs(search?: string, empresaId?: string, status?: strin
 
   let query = supabase
     .from("unidades_consumidoras")
-    .select("id, codigo_uc, titular, distribuidora, potencia_instalada_kwp, cidade, estado, ativa, arquivada, empresa_id, enquadramento_tarifario, modalidade_tarifaria, quantidade_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, geracao_estimada_mensal_kwh, station_id, observacoes, grupo_tarifario, subgrupo, concessionaria_sigla, modalidade_tarifaria_aneel, empresa:empresas(id, nome)")
+    .select("id, codigo_uc, titular, distribuidora, potencia_instalada_kwp, cidade, estado, ativa, arquivada, empresa_id, enquadramento_tarifario, modalidade_tarifaria, quantidade_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, geracao_estimada_mensal_kwh, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, station_id, observacoes, grupo_tarifario, subgrupo, concessionaria_sigla, modalidade_tarifaria_aneel, empresa:empresas(id, nome)")
     .order("codigo_uc");
 
   if (status === "ativas") {
@@ -294,6 +344,43 @@ export async function getUC(id: string) {
   return data;
 }
 
+// Retorna UCs vinculadas com seus stations agrupados (para o seletor Empresa → UC)
+export async function getUCsComStations() {
+  const supabase = await createServerClient();
+
+  const { data: links } = await supabase
+    .from("uc_stations")
+    .select("uc_id, station_id, provider");
+
+  if (!links || links.length === 0) return [];
+
+  const ucIds = [...new Set(links.map((l) => l.uc_id))];
+
+  const { data: ucsData } = await supabase
+    .from("unidades_consumidoras")
+    .select("id, codigo_uc, empresa_id, empresa:empresas(id, nome)")
+    .in("id", ucIds)
+    .eq("ativa", true);
+
+  if (!ucsData) return [];
+
+  return ucsData.map((uc) => {
+    const empresaRaw = uc.empresa as unknown;
+    const empresa = (Array.isArray(empresaRaw) ? empresaRaw[0] ?? null : empresaRaw) as { id: string; nome: string } | null;
+    const stations = links
+      .filter((l) => l.uc_id === uc.id)
+      .map((l) => ({ station_id: l.station_id, provider: l.provider as "solis" | "sungrow" }));
+
+    return {
+      ucId: uc.id,
+      codigoUc: uc.codigo_uc,
+      empresaId: uc.empresa_id,
+      empresaNome: empresa?.nome ?? "",
+      stations,
+    };
+  });
+}
+
 interface SolisUCData {
   station_id: string;
   station_name: string;
@@ -305,24 +392,90 @@ interface SolisUCData {
   cidade_uf: string | null;
 }
 
+// Normaliza nome para comparação (remove acentos, lowercase, trim)
+function normalizeName(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 export async function vincularSolisUC(
   empresaId: string,
   solisData: SolisUCData
 ): Promise<ActionResult> {
   const supabase = await createServerClient();
 
-  // Verificar se já existe UC com esse station_id
-  const { data: existing } = await supabase
-    .from("unidades_consumidoras")
-    .select("id")
+  // Verificar se já existe vínculo para esse station_id
+  const { data: existingLink } = await supabase
+    .from("uc_stations")
+    .select("uc_id")
     .eq("station_id", solisData.station_id)
     .maybeSingle();
 
-  if (existing) {
+  if (existingLink) {
     return { error: "Esta usina já está vinculada a uma UC." };
   }
 
-  // Parsear cidade/estado do campo cidade_uf
+  // Detectar provider via usinas_cache
+  const { data: cacheRow } = await supabase
+    .from("usinas_cache")
+    .select("provider")
+    .eq("station_id", solisData.station_id)
+    .maybeSingle();
+
+  const provider = cacheRow?.provider ?? "solis";
+
+  // Verificar se já existe uma UC do mesmo cliente com nome similar
+  // (caso de usina com inversores de provedores diferentes)
+  const { data: ucsEmpresa } = await supabase
+    .from("unidades_consumidoras")
+    .select("id, codigo_uc")
+    .eq("empresa_id", empresaId)
+    .eq("ativa", true);
+
+  const nomeNormalizado = normalizeName(solisData.station_name);
+  const ucExistente = ucsEmpresa?.find(
+    (uc) => normalizeName(uc.codigo_uc) === nomeNormalizado
+  );
+
+  if (ucExistente) {
+    // UC com mesmo nome já existe — vincular station a ela (multi-provedor)
+    const { error: linkError } = await supabase.from("uc_stations").insert({
+      uc_id: ucExistente.id,
+      station_id: solisData.station_id,
+      provider,
+    });
+
+    if (linkError) {
+      return { error: "Erro ao vincular usina à UC existente." };
+    }
+
+    // Somar potência e inversores na UC existente
+    const { data: ucAtual } = await supabase
+      .from("unidades_consumidoras")
+      .select("potencia_instalada_kwp, quantidade_inversores")
+      .eq("id", ucExistente.id)
+      .single();
+
+    if (ucAtual) {
+      await supabase
+        .from("unidades_consumidoras")
+        .update({
+          potencia_instalada_kwp: (ucAtual.potencia_instalada_kwp ?? 0) + solisData.potencia_instalada_kwp,
+          quantidade_inversores: (ucAtual.quantidade_inversores ?? 0) + solisData.qtd_inversores,
+        })
+        .eq("id", ucExistente.id);
+    }
+
+    revalidatePath("/admin/clientes");
+    revalidatePath(`/admin/clientes/${empresaId}`);
+    revalidatePath("/admin/unidades");
+    return { data: { id: ucExistente.id } };
+  }
+
+  // Nenhuma UC similar — criar nova
   let cidade: string | null = null;
   let estado: string | null = null;
   if (solisData.cidade_uf) {
@@ -339,7 +492,7 @@ export async function vincularSolisUC(
       empresa_id: empresaId,
       codigo_uc: solisData.station_name,
       titular: solisData.station_name,
-      distribuidora: "Solis",
+      distribuidora: provider === "sungrow" ? "SunGrow" : "Solis",
       enquadramento_tarifario: "trifasico",
       modalidade_tarifaria: "convencional",
       potencia_instalada_kwp: solisData.potencia_instalada_kwp,
@@ -355,11 +508,65 @@ export async function vincularSolisUC(
     .single();
 
   if (error) {
-    return { error: "Erro ao vincular usina Solis." };
+    return { error: "Erro ao vincular usina." };
   }
+
+  // Criar vínculo em uc_stations
+  await supabase.from("uc_stations").insert({
+    uc_id: data.id,
+    station_id: solisData.station_id,
+    provider,
+  });
 
   revalidatePath("/admin/clientes");
   revalidatePath(`/admin/clientes/${empresaId}`);
   revalidatePath("/admin/unidades");
   return { data: { id: data.id } };
+}
+
+// Vincular um station_id adicional a uma UC já existente (multi-provedor)
+export async function vincularStationAUC(
+  ucId: string,
+  stationId: string,
+  provider: "solis" | "sungrow"
+): Promise<ActionResult> {
+  const supabase = await createServerClient();
+
+  // Verificar se station_id já está vinculado a outra UC
+  const { data: existingLink } = await supabase
+    .from("uc_stations")
+    .select("uc_id")
+    .eq("station_id", stationId)
+    .maybeSingle();
+
+  if (existingLink) {
+    return { error: "Esta usina já está vinculada a uma UC." };
+  }
+
+  const { error } = await supabase.from("uc_stations").insert({
+    uc_id: ucId,
+    station_id: stationId,
+    provider,
+  });
+
+  if (error) {
+    return { error: "Erro ao vincular usina adicional." };
+  }
+
+  revalidatePath("/admin/unidades");
+  revalidatePath("/admin/clientes");
+  return {};
+}
+
+// Buscar todos os station_ids vinculados a uma UC
+export async function getUCStations(ucId: string) {
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("uc_stations")
+    .select("station_id, provider")
+    .eq("uc_id", ucId);
+
+  if (error) return [];
+  return data;
 }

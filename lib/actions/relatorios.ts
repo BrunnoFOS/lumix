@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
+import { calcularGeracaoEstimadaUC } from "@/lib/actions/geracao-estimada";
+import { classificarDesempenho } from "@/lib/geracao-estimada";
 
 interface ActionResult {
   error?: string;
@@ -27,10 +29,25 @@ export async function createRelatorio(formData: FormData): Promise<ActionResult>
   }
 
   const geracao_kwh = parseDecimal(formData.get("geracao_kwh") as string);
-  const geracao_estimada_kwh = parseDecimal(formData.get("geracao_estimada_kwh") as string);
+  let geracao_estimada_kwh = parseDecimal(formData.get("geracao_estimada_kwh") as string);
   const economia_reais = parseDecimal(formData.get("economia_reais") as string);
-  const indice_performance = (formData.get("indice_performance") as string) || null;
+  let indice_performance = (formData.get("indice_performance") as string) || null;
   const fatura_id = (formData.get("fatura_id") as string) || null;
+
+  // Auto-calcular geração estimada se não fornecida
+  if (geracao_estimada_kwh == null) {
+    const estimativa = await calcularGeracaoEstimadaUC(uc_id, mes_referencia, geracao_kwh ?? undefined);
+    if ("data" in estimativa) {
+      geracao_estimada_kwh = estimativa.data.geracao_estimada_kwh;
+      if (estimativa.data.indice_performance && !indice_performance) {
+        indice_performance = estimativa.data.indice_performance;
+      }
+    }
+  } else if (geracao_kwh != null && geracao_estimada_kwh > 0 && !indice_performance) {
+    // Se ambos fornecidos, calcular PR
+    const pr = (geracao_kwh / geracao_estimada_kwh) * 100;
+    indice_performance = classificarDesempenho(pr);
+  }
 
   const { data, error } = await supabase
     .from("relatorios")
@@ -155,7 +172,7 @@ export async function getRelatorios(search?: string, statusEnvio?: string, empre
 
   let query = supabase
     .from("relatorios")
-    .select("id, uc_id, empresa_id, mes_referencia, titulo, geracao_kwh, geracao_estimada_kwh, economia_reais, indice_performance, status_envio, gerado_por, pdf_url, arquivado, created_at, uc:unidades_consumidoras(id, codigo_uc), empresa:empresas(id, nome)")
+    .select("id, uc_id, empresa_id, mes_referencia, titulo, geracao_kwh, geracao_estimada_kwh, economia_reais, indice_performance, status_envio, gerado_por, tipo_relatorio, pdf_url, arquivado, created_at, uc:unidades_consumidoras(id, codigo_uc), empresa:empresas(id, nome)")
     .eq("arquivado", false)
     .order("mes_referencia", { ascending: false });
 
@@ -214,7 +231,7 @@ export async function getRelatoriosCliente(empresaIds: string | string[]) {
 
   const { data, error } = await supabase
     .from("relatorios")
-    .select("id, mes_referencia, titulo, geracao_kwh, geracao_estimada_kwh, economia_reais, indice_performance, status_envio, pdf_url, uc:unidades_consumidoras(id, codigo_uc)")
+    .select("id, mes_referencia, titulo, geracao_kwh, geracao_estimada_kwh, economia_reais, indice_performance, status_envio, tipo_relatorio, pdf_url, uc:unidades_consumidoras(id, codigo_uc)")
     .in("empresa_id", ids)
     .eq("status_envio", "enviado")
     .order("mes_referencia", { ascending: false });
@@ -260,6 +277,13 @@ export async function criarRelatorioComAnexo(formData: FormData): Promise<Action
   const mesDate = new Date(mes_referencia + "T00:00:00");
   const mesNome = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(mesDate);
 
+  // Tentar calcular geração estimada automaticamente
+  let geracao_estimada_kwh: number | null = null;
+  const estimativa = await calcularGeracaoEstimadaUC(uc_id, mes_referencia);
+  if ("data" in estimativa) {
+    geracao_estimada_kwh = estimativa.data.geracao_estimada_kwh;
+  }
+
   const { data, error } = await supabase
     .from("relatorios")
     .insert({
@@ -268,6 +292,7 @@ export async function criarRelatorioComAnexo(formData: FormData): Promise<Action
       mes_referencia,
       titulo: `Relatório ${mesNome} - ${uc.codigo_uc}`,
       pdf_url,
+      geracao_estimada_kwh,
       status_envio: "pendente",
       gerado_por: "manual",
     })

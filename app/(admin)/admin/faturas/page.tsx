@@ -5,6 +5,7 @@ import { FaturaTable } from "@/components/admin/FaturaTable";
 import { FaturaSearch } from "@/components/admin/FaturaSearch";
 import { getFaturas } from "@/lib/actions/faturas";
 import { getEmpresas } from "@/lib/actions/empresas";
+import { createServerClient } from "@/lib/supabase/server";
 
 interface Props {
   searchParams: Promise<{ search?: string; status?: string; empresa?: string }>;
@@ -12,10 +13,29 @@ interface Props {
 
 export default async function FaturasPage({ searchParams }: Props) {
   const params = await searchParams;
-  const [faturas, empresas] = await Promise.all([
+  const supabase = await createServerClient();
+
+  const [faturas, empresas, { data: relatorios }] = await Promise.all([
     getFaturas(params.search, params.status, params.empresa),
     getEmpresas(),
+    supabase
+      .from("relatorios")
+      .select("id, uc_id, mes_referencia, pdf_url, status_envio, tipo_relatorio")
+      .eq("arquivado", false),
   ]);
+
+  const relatoriosMap: Record<string, { id: string; pdf_url: string | null; status_envio: string; tipo_relatorio: string }> = {};
+  if (relatorios) {
+    for (const rel of relatorios) {
+      const key = `${rel.uc_id}|${rel.mes_referencia}`;
+      relatoriosMap[key] = {
+        id: rel.id,
+        pdf_url: rel.pdf_url,
+        status_envio: rel.status_envio,
+        tipo_relatorio: rel.tipo_relatorio,
+      };
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -38,7 +58,7 @@ export default async function FaturasPage({ searchParams }: Props) {
         />
       </Suspense>
 
-      <FaturaTable faturas={faturas} />
+      <FaturaTable faturas={faturas} relatorios={relatoriosMap} />
     </div>
   );
 }

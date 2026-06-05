@@ -1,7 +1,7 @@
 # Lumix — Database Schema
 
 **Database:** Supabase (PostgreSQL)
-**Last updated:** 2026-04-10
+**Last updated:** 2026-06-01
 
 IMPORTANT: Este arquivo é a fonte de verdade. Nunca adicione colunas, tabelas ou
 relacionamentos que não estejam definidos aqui. Quando o schema mudar,
@@ -106,7 +106,11 @@ Unidades consumidoras (UCs) com dados técnicos do sistema fotovoltaico.
 | modelo_inversores | text | | Modelo/fabricante dos inversores |
 | potencia_inversor_kw | decimal(10,2) | | Potência do inversor em kW |
 | data_instalacao | date | | Data de instalação do sistema |
-| geracao_estimada_mensal_kwh | decimal(10,2) | | Estimativa de geração mensal em kWh |
+| geracao_estimada_mensal_kwh | decimal(10,2) | | Estimativa estática de geração mensal em kWh (fallback) |
+| fator_rendimento | decimal(5,4) | nullable | Fator de rendimento da instalação (ex: 0.95). Perdas específicas (sombreamento, orientação, cabeamento) |
+| degradacao_ano_zero | decimal(5,4) | nullable | Degradação no primeiro ano (ex: 0.02 para 2%) |
+| degradacao_anos_seguintes | decimal(5,4) | nullable | Degradação anual recorrente a partir do segundo ano (ex: 0.006 para 0,6%) |
+| contrato_acl_rs_mwh | decimal(10,2) | nullable | Preço negociado do contrato ACL em R$/MWh. Apenas para UCs com grupo_tarifario = 'acl'. Converter para R$/kWh dividindo por 1000 |
 | ativa | boolean | NOT NULL, default true | Se a UC está ativa |
 | arquivada | boolean | NOT NULL, default false | Se a UC está arquivada |
 | station_id | text | | ID da usina na Solis Cloud (vinculação externa) |
@@ -257,6 +261,112 @@ Cache de usinas sincronizadas via cron n8n. O frontend lê desta tabela — nunc
 
 ---
 
+### `uc_stations`
+
+Tabela de junção que vincula UCs a station_ids de provedores. Permite que uma mesma UC tenha inversores monitorados por múltiplos provedores (ex: usina com inversores Solis + SunGrow).
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | uuid | PK, default gen_random_uuid() | |
+| uc_id | uuid | FK → unidades_consumidoras.id ON DELETE CASCADE, NOT NULL | UC vinculada |
+| station_id | text | NOT NULL, UNIQUE | ID da usina no provedor |
+| provider | text | NOT NULL, check in ('solis','sungrow') | Provedor de monitoramento |
+| created_at | timestamptz | NOT NULL, default now() | |
+
+**Unique constraints:** (uc_id, station_id), (station_id)
+
+**Relationships:**
+- uc_stations.uc_id → unidades_consumidoras.id (many-to-one)
+- uc_stations.station_id → usinas_cache.station_id (logical, não FK)
+
+**RLS Policies:**
+- ALL: Admin acesso total.
+- SELECT: Cliente lê apenas vínculos de UCs da sua empresa.
+
+**Uso:** Substituiu o campo `station_id` direto na `unidades_consumidoras`. Para buscar todos os provedores de uma UC: `SELECT * FROM uc_stations WHERE uc_id = ?`. Para relatórios, buscar geração de cada station_id e agregar.
+
+---
+
+### `ghi_municipios`
+
+Irradiação solar horizontal global (GHI) média mensal por município brasileiro. Dados importados do Atlas Brasileiro de Energia Solar (INPE). Valores armazenados em Wh/m²/dia — dividir por 1000 para obter kWh/m²/dia na fórmula de geração estimada.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | serial | PK | |
+| nome | text | NOT NULL | Nome do município normalizado (lowercase, sem acentos) |
+| uf | char(2) | NOT NULL | UF do estado (ex: SP, MG) |
+| lat | decimal(10,6) | nullable | Latitude |
+| lon | decimal(10,6) | nullable | Longitude |
+| jan | decimal(8,2) | NOT NULL | GHI médio janeiro (Wh/m²/dia) |
+| fev | decimal(8,2) | NOT NULL | GHI médio fevereiro |
+| mar | decimal(8,2) | NOT NULL | GHI médio março |
+| abr | decimal(8,2) | NOT NULL | GHI médio abril |
+| mai | decimal(8,2) | NOT NULL | GHI médio maio |
+| jun | decimal(8,2) | NOT NULL | GHI médio junho |
+| jul | decimal(8,2) | NOT NULL | GHI médio julho |
+| ago | decimal(8,2) | NOT NULL | GHI médio agosto |
+| set_ | decimal(8,2) | NOT NULL | GHI médio setembro |
+| out | decimal(8,2) | NOT NULL | GHI médio outubro |
+| nov | decimal(8,2) | NOT NULL | GHI médio novembro |
+| dez | decimal(8,2) | NOT NULL | GHI médio dezembro |
+| anual | decimal(8,2) | NOT NULL | GHI médio anual |
+
+**Unique constraint:** (nome, uf)
+
+**Lookup para geração estimada:** Dado cidade + estado da UC, normalizar o nome (lowercase, sem acentos) e buscar `WHERE nome = normalized_city AND uf = state_uf`.
+
+**RLS Policies:**
+- SELECT: Todos os usuários autenticados.
+- INSERT/UPDATE/DELETE: Apenas admin.
+
+---
+
+### `faturas_processadas`
+
+Relatórios de fatura gerados via extração automática (LlamaParse + Gemini). O admin pode revisar campos extraídos e regerar o PDF sem reprocessar a fatura original. Cada regeração sobrescreve o PDF anterior — sem histórico de versões.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | uuid | PK, default gen_random_uuid() | |
+| uc_id | uuid | FK → unidades_consumidoras.id, NOT NULL | UC da fatura |
+| mes_referencia | date | NOT NULL | Mês/ano da fatura (primeiro dia do mês) |
+| pdf_fatura_url | text | | URL do PDF da fatura original no Storage |
+| pdf_relatorio_url | text | | URL do PDF do relatório gerado (sobrescrito a cada regeração) |
+| status | text | NOT NULL, check in ('extraindo','extraido','gerando','gerado','erro'), default 'extraindo' | Status do processamento |
+| observacao | text | | Campo livre para observação do admin (aparece no rodapé do relatório) |
+| ultima_edicao_at | timestamptz | | Atualizado a cada regeração |
+| editado_por | uuid | FK → profiles.id, nullable | Admin que fez a última edição |
+| consumo_total_kwh | decimal(10,2) | | Consumo total do período |
+| consumo_ponta_kwh | decimal(10,2) | | Consumo no horário de ponta (Grupo A) |
+| consumo_fora_ponta_kwh | decimal(10,2) | | Consumo fora ponta (Grupo A) |
+| energia_injetada_kwh | decimal(10,2) | | Energia injetada na rede |
+| consumo_injetado_mesma_uc_kwh | decimal(10,2) | | Crédito consumido na própria UC |
+| consumo_injetado_outra_uc_kwh | decimal(10,2) | | Crédito transferido para outra UC |
+| credito_acumulado_kwh | decimal(10,2) | | Saldo de créditos acumulados |
+| valor_total_fatura_rs | decimal(10,2) | | Valor total da fatura em R$ |
+| vto_ci_rs | decimal(10,2) | | Valor total da operação — consumo injetado |
+| tem_geracao_compartilhada | boolean | default false | Indica geração compartilhada |
+| evidencia_geracao_compartilhada | text | | Texto extraído da fatura como evidência |
+| data_vencimento | date | | Data de vencimento da fatura |
+| numero_fatura | text | | Identificador da fatura emitido pela concessionária |
+| created_at | timestamptz | NOT NULL, default now() | |
+| updated_at | timestamptz | NOT NULL, default now() | |
+
+**Unique constraint:** (uc_id, mes_referencia)
+
+**Relationships:**
+- faturas_processadas.uc_id → unidades_consumidoras.id
+- faturas_processadas.editado_por → profiles.id
+
+**RLS Policies:**
+- SELECT: Admin lê todas. Cliente lê apenas faturas processadas de UCs da sua empresa.
+- INSERT: Apenas admin.
+- UPDATE: Apenas admin.
+- DELETE: Apenas admin.
+
+---
+
 ## Functions & Triggers
 
 ### `handle_updated_at()`
@@ -286,6 +396,32 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 ```
+
+---
+
+### `impostos_concessionaria`
+
+Alíquotas de impostos (ICMS, PIS, COFINS) por concessionária e período de vigência. Usadas para calcular o fator multiplicador gross-up aplicado sobre as tarifas ANEEL (que são sem impostos). Fórmula: `fator = 1 / (1 - icms - pis - cofins)`.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | uuid | PK, default gen_random_uuid() | |
+| concessionaria_sigla | text | NOT NULL | Sigla da concessionária (ex: COSERN, RGE, CPFL) |
+| uf | char(2) | NOT NULL | UF do estado (ex: RN, RS, SP) |
+| icms_aliquota | decimal(6,5) | NOT NULL | Alíquota ICMS (ex: 0.18000 para 18%) |
+| pis_aliquota | decimal(6,5) | NOT NULL | Alíquota PIS (ex: 0.01650 para 1,65%) |
+| cofins_aliquota | decimal(6,5) | NOT NULL | Alíquota COFINS (ex: 0.07600 para 7,6%) |
+| vigencia_inicio | date | NOT NULL | Início da vigência |
+| vigencia_fim | date | nullable | Fim da vigência (null = vigente) |
+| fonte_url | text | | URL da fonte (site concessionária ou legislação) |
+| observacoes | text | | Notas adicionais |
+| created_at | timestamptz | NOT NULL, default now() | |
+
+**Lookup para relatórios:** Dado `concessionaria_sigla` + `mes_referencia`, buscar o registro onde `vigencia_inicio <= mes_referencia AND (vigencia_fim IS NULL OR vigencia_fim >= mes_referencia)`.
+
+**RLS Policies:**
+- SELECT: Todos os usuários autenticados.
+- INSERT/UPDATE/DELETE: Apenas admin.
 
 ---
 
@@ -334,6 +470,12 @@ Tarifas importadas do BI da ANEEL. Registros nunca são sobrescritos — cada im
 | tarifas_aneel | sigla, subgrupo, posto, vigencia_inicio | btree | Lookup por concessionária |
 | tarifas_aneel | vigencia_inicio, vigencia_fim | btree | Busca por vigência |
 | tarifas_aneel | sigla, subgrupo, COALESCE(modalidade,''), posto, vigencia_inicio | unique | Evitar duplicatas |
+| uc_stations | uc_id | btree | Busca por UC |
+| uc_stations | station_id | btree (unique) | Busca por station_id |
+| ghi_municipios | nome, uf | btree (unique) | Lookup por município + UF |
+| faturas_processadas | uc_id, mes_referencia | btree (unique) | Busca por UC e período |
+| faturas_processadas | uc_id | btree | Filtro por UC |
+| impostos_concessionaria | concessionaria_sigla, vigencia_inicio, vigencia_fim | btree | Lookup por concessionária + data |
 
 ---
 

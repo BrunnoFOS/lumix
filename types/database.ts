@@ -72,6 +72,10 @@ export interface UnidadeConsumidora {
   potencia_inversor_kw: number | null;
   data_instalacao: string | null;
   geracao_estimada_mensal_kwh: number | null;
+  fator_rendimento: number | null;
+  degradacao_ano_zero: number | null;
+  degradacao_anos_seguintes: number | null;
+  contrato_acl_rs_mwh: number | null;
   ativa: boolean;
   arquivada: boolean;
   station_id: string | null;
@@ -153,6 +157,49 @@ export interface Tarifa {
   vigencia_inicio: string;
   vigencia_fim: string | null;
   ativa: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImpostoConcessionaria {
+  id: string;
+  concessionaria_sigla: string;
+  uf: string;
+  icms_aliquota: number;
+  pis_aliquota: number;
+  cofins_aliquota: number;
+  vigencia_inicio: string;
+  vigencia_fim: string | null;
+  fonte_url: string | null;
+  observacoes: string | null;
+  created_at: string;
+}
+
+export type StatusFaturaProcessada = "extraindo" | "extraido" | "gerando" | "gerado" | "erro";
+
+export interface FaturaProcessada {
+  id: string;
+  uc_id: string;
+  mes_referencia: string;
+  pdf_fatura_url: string | null;
+  pdf_relatorio_url: string | null;
+  status: StatusFaturaProcessada;
+  observacao: string | null;
+  ultima_edicao_at: string | null;
+  editado_por: string | null;
+  consumo_total_kwh: number | null;
+  consumo_ponta_kwh: number | null;
+  consumo_fora_ponta_kwh: number | null;
+  energia_injetada_kwh: number | null;
+  consumo_injetado_mesma_uc_kwh: number | null;
+  consumo_injetado_outra_uc_kwh: number | null;
+  credito_acumulado_kwh: number | null;
+  valor_total_fatura_rs: number | null;
+  vto_ci_rs: number | null;
+  tem_geracao_compartilhada: boolean;
+  evidencia_geracao_compartilhada: string | null;
+  data_vencimento: string | null;
+  numero_fatura: string | null;
   created_at: string;
   updated_at: string;
 }

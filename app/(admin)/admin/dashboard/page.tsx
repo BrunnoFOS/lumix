@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Building2, Zap, FileText, DollarSign, TrendingUp, Activity } from "lucide-react";
 import { formatCurrency, formatKWh, formatMesReferencia } from "@/lib/utils";
 import { SolisGeracaoMensal } from "@/components/admin/SolisGeracaoMensal";
-import type { UsinaComProvider } from "@/components/admin/SolisGeracaoMensal";
-import { fetchSolisUCs, fetchSungrowUCs } from "@/lib/actions/solis";
+import { getUCsComStations } from "@/lib/actions/unidades";
+import { getEmpresas } from "@/lib/actions/empresas";
 
 async function getEmpresasDashboard(supabase: Awaited<ReturnType<typeof createServerClient>>) {
   // Buscar empresas ativas com suas UCs
@@ -95,16 +95,13 @@ export default async function AdminDashboardPage() {
     supabase.from("faturas").select("id", { count: "exact", head: true }).eq("status", "pendente"),
   ]);
 
-  const [empresasDashboard, solisUCs, sungrowUCs] = await Promise.all([
+  const [empresasDashboard, empresasList, ucsComStations] = await Promise.all([
     getEmpresasDashboard(supabase),
-    fetchSolisUCs(),
-    fetchSungrowUCs(),
+    getEmpresas(),
+    getUCsComStations(),
   ]);
 
-  const todasUsinas: UsinaComProvider[] = [
-    ...solisUCs.data.map((u) => ({ ...u, provider: "solis" as const })),
-    ...sungrowUCs.data.map((u) => ({ ...u, provider: "sungrow" as const })),
-  ];
+  const empresasOptions = empresasList.map((e) => ({ id: e.id, nome: e.nome }));
 
   const stats = [
     { label: "Clientes", value: empresasRes.count ?? 0, icon: Building2, href: "/admin/clientes", color: "text-primary", bg: "bg-orange-50" },
@@ -215,8 +212,8 @@ export default async function AdminDashboardPage() {
       )}
 
       {/* Geração mensal */}
-      {todasUsinas.length > 0 && (
-        <SolisGeracaoMensal usinas={todasUsinas} />
+      {ucsComStations.length > 0 && (
+        <SolisGeracaoMensal empresas={empresasOptions} ucs={ucsComStations} />
       )}
     </div>
   );

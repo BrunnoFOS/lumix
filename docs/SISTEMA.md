@@ -1,551 +1,573 @@
 # Lumix — Documentação Completa do Sistema
 
+**Última atualização:** Junho/2026
+
 ---
 
 ## 1. Visão Geral
 
-O **Lumix** é um sistema web de monitoramento de usinas fotovoltaicas. Ele permite que a equipe Lumix (admin) gerencie empresas clientes, unidades consumidoras, faturas de energia, relatórios de performance e tarifas. Empresas clientes acompanham a geração de energia, economia e baixam relatórios mensais.
+O **Lumix** é um sistema web de monitoramento de usinas fotovoltaicas. Atende dois perfis de usuário:
 
-### Core Loop
-> Cliente faz login → vê dashboard com geração total (kWh), comparativo real vs estimado, indicador de performance (Bom/Regular/Ruim) e economia estimada (R$).
+- **Admin (Equipe Lumix):** gerencia clientes, unidades consumidoras, tarifas, faturas, impostos e relatórios. Acesso total ao sistema.
+- **Cliente (Empresa):** acompanha geração de energia, performance da usina, economia e histórico de relatórios. Pode enviar faturas para processamento.
 
-### Stack Tecnológica
+### Stack Tecnológico
 
 | Camada | Tecnologia |
 |--------|-----------|
-| Framework | Next.js 15 (App Router, React Server Components) |
-| Banco de dados | Supabase (PostgreSQL + RLS) |
-| Autenticação | Supabase Auth (email/senha) |
-| Armazenamento | Supabase Storage (PDFs e imagens de fatura) |
-| Estilização | Tailwind CSS 4 + shadcn/ui |
+| Framework | Next.js 15 (App Router, React Server Components, Server Actions) |
+| Banco de dados | Supabase (PostgreSQL) com RLS (Row Level Security) |
+| Autenticação | Supabase Auth (email + senha, session cookies) |
+| Armazenamento | Supabase Storage (PDFs, imagens de faturas) |
+| UI | React 19, Tailwind CSS 4, shadcn/ui, Lucide React (ícones) |
 | Gráficos | Recharts |
-| Testes | Vitest (unitários) |
-| Deploy | Vercel |
+| Workflows | n8n (extração OCR, sync de usinas, geração de PDFs) |
+| Inversores | APIs Solis Cloud + SunGrow (via n8n) |
+| Testes | Vitest (unitários), Playwright (E2E) |
+| Deploy | Vercel + EasyPanel (n8n, Gotenberg) |
 
 ---
 
-## 2. Perfis de Acesso
+## 2. Autenticação e Controle de Acesso
 
-### Admin (Equipe Lumix)
-- CRUD completo em empresas, UCs, faturas, relatórios e tarifas
-- Cria e gerencia usuários dentro de cada empresa (máx. 2 por empresa)
-- Altera senhas de usuários clientes
-- Gera relatórios manuais
-- Insere dados de fatura manualmente
-- Vê dados de todas as empresas no dashboard
-- Exporta dados em CSV
+### Login
 
-### Cliente (Empresa com usina solar)
-- Visualiza dashboard com KPIs de geração, economia e performance
-- Acessa histórico de relatórios (apenas os marcados como "enviado")
-- Visualiza dados técnicos da usina (somente leitura)
-- Faz upload de imagem/PDF da fatura de energia
-- **Matriz** vê dados de todas as suas filiais
-- **Filial** vê apenas seus próprios dados
+- **Método:** Email + senha
+- **Validação:** ambos obrigatórios
+- **Erro:** "Email ou senha incorretos."
+- **Após login:** sistema consulta `profiles.role` e redireciona:
+  - `admin` → `/admin/dashboard`
+  - `cliente` → `/cliente/dashboard`
 
----
+### Cadastro de Conta
 
-## 3. Funcionalidades Detalhadas
+- **Campos:** nome, email, senha (mínimo 6 caracteres)
+- **Role automático:** `cliente` (via trigger `handle_new_user()`)
+- **Verificação:** email de confirmação enviado automaticamente
+- **Mensagem de sucesso:** "Conta criada com sucesso! Verifique seu email."
+- **Obs:** A tela de login atualmente não exibe links de cadastro ou recuperação de senha — apenas email, senha e botão "Entrar".
 
-### 3.1 Autenticação e Controle de Acesso
+### Recuperação de Senha
 
-**O que faz:** Login com email/senha. Dois perfis (admin/cliente) com redirecionamento automático.
+- Envia email com link de recuperação via Supabase
+- Callback em `/auth/callback?type=recovery`
 
-**Fluxo:**
-1. Usuário acessa `/login` e submete credenciais
-2. Supabase Auth valida e cria sessão via cookie
-3. Proxy middleware (`proxy.ts`) verifica sessão em toda request
-4. Profile do usuário é consultado para determinar role
-5. Admin → `/admin/dashboard` | Cliente → `/cliente/dashboard`
-6. Rotas protegidas: admin não acessa `/cliente/*` e vice-versa
-7. RLS no banco garante isolamento dos dados
+### Middleware
 
-**Dados necessários:**
-- `profiles`: id (= auth.users.id), role, nome, email, empresa_id
-- Trigger `handle_new_user()` cria profile automaticamente no signup
+Toda requisição para rotas `(admin)/*` e `(cliente)/*` passa pelo middleware que valida a sessão. Sem sessão válida → redirect para `/login`.
 
-**Páginas:**
-- `/login` — formulário de login
-- `/signup` — criação de conta (entra como "cliente")
-- `/reset-password` — recuperação de senha por email
+### RLS (Row Level Security)
+
+Cada tabela tem políticas de acesso:
+- **Admin:** lê e escreve tudo
+- **Cliente:** lê apenas dados vinculados à sua empresa (via `empresa_id`)
+- A query do cliente sempre filtra por `empresa_id` como defesa em profundidade
 
 ---
 
-### 3.2 Gestão de Empresas (Admin)
+## 3. Painel do Admin
 
-**O que faz:** Admin cadastra, edita, desativa e arquiva empresas clientes. Suporte a estrutura matriz/filial.
+### 3.1 Dashboard (`/admin/dashboard`)
 
-**Fluxo:**
-1. Admin acessa `/admin/clientes` → lista de empresas com busca e filtros
-2. Cria nova empresa com CNPJ validado (algoritmo de dígitos verificadores)
-3. Auto-preenchimento via APIs externas: CNPJ (BrasilAPI) e CEP (ViaCEP)
-4. Define se é matriz ou filial (filial aponta para uma matriz via `matriz_id`)
-5. Pode desativar (soft delete via `ativa=false`) ou arquivar (`arquivada=true`)
-6. Na página de detalhes, vê filiais, UCs e gerencia usuários
+**Cards de KPIs (4 colunas):**
 
-**Dados necessários (tabela `empresas`):**
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| nome | text | Razão social |
-| cnpj | text (UNIQUE) | CNPJ sem máscara |
-| tipo | 'matriz' \| 'filial' | Tipo da empresa |
-| matriz_id | uuid (nullable) | FK para matriz se for filial |
-| endereco, cidade, estado, cep | text | Endereço |
-| telefone, email | text | Contato |
-| responsavel | text | Nome do responsável |
-| ativa | boolean | Se está ativa |
-| arquivada | boolean | Se está arquivada |
+| Card | Dado | Link |
+|------|------|------|
+| Clientes | Total de empresas ativas | `/admin/clientes` |
+| Unidades consumidoras | Total de UCs ativas | `/admin/unidades` |
+| Relatórios pendentes | Contagem status = "pendente" | `/admin/relatorios` |
+| Faturas pendentes | Contagem status = "pendente" | `/admin/faturas` |
 
-**Interligações:**
-- `empresas` ← `profiles.empresa_id` (usuários da empresa)
-- `empresas` ← `unidades_consumidoras.empresa_id` (UCs da empresa)
-- `empresas` ← `relatorios.empresa_id` (relatórios)
-- `empresas.matriz_id` → `empresas.id` (auto-referência filiais)
-
-**Exportação:** CSV com nome, CNPJ, tipo, cidade, UF, status
-
----
-
-### 3.3 Gestão de Usuários por Empresa (Admin)
-
-**O que faz:** Admin cria, exclui e reseta senha de usuários vinculados a cada empresa. Limite de 2 usuários por empresa.
-
-**Fluxo:**
-1. Admin acessa `/admin/clientes/[id]` → seção "Usuários"
-2. Vê lista de usuários com nome, email, telefone, data de criação
-3. Cria novo usuário: nome, email, senha (mín. 6 caracteres), telefone
-4. Sistema verifica limite (máx. 2 por empresa)
-5. Usa `supabase.auth.admin.createUser()` para criar no auth
-6. Profile é atualizado com `empresa_id` para vincular à empresa
-7. Reset de senha: inline, apenas admin pode alterar
-8. Exclusão: com confirmação, remove do auth via `admin.deleteUser()`
-
-**Dados necessários:**
-- Tabela `profiles`: id, nome, email, empresa_id, role='cliente', telefone
-- Supabase Auth: email, password (gerenciado pelo admin)
-
-**Regras:**
-- Máximo 2 usuários por empresa
-- Apenas admin pode criar/excluir/resetar senha
-- Usuário não pode alterar sua própria senha (feito pelo admin)
-
----
-
-### 3.4 Gestão de Unidades Consumidoras (Admin)
-
-**O que faz:** Admin cadastra UCs por empresa com todos os dados técnicos do sistema fotovoltaico.
-
-**Fluxo:**
-1. Admin acessa `/admin/unidades` → lista com busca, filtro por empresa e status
-2. Cria UC vinculada a uma empresa com dados técnicos completos
-3. Pode desativar ou arquivar UCs
-4. Na página de detalhes, vê specs técnicos completos
-
-**Dados necessários (tabela `unidades_consumidoras`):**
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| empresa_id | uuid | FK para empresa dona |
-| codigo_uc | text | Código na distribuidora |
-| titular | text | Nome do titular |
-| distribuidora | text | Ex: CEMIG, CPFL |
-| enquadramento_tarifario | 'monofasico' \| 'bifasico' \| 'trifasico' | Tipo de ligação |
-| modalidade_tarifaria | 'convencional' \| 'branca' \| 'verde' \| 'azul' | Modalidade |
-| potencia_instalada_kwp | decimal | Potência em kWp |
-| quantidade_modulos | integer | Qtd. de módulos |
-| modelo_modulos | text | Fabricante/modelo |
-| potencia_modulo_w | integer | Potência por módulo (W) |
-| quantidade_inversores | integer | Qtd. de inversores |
-| modelo_inversores | text | Fabricante/modelo |
-| potencia_inversor_kw | decimal | Potência por inversor (kW) |
-| data_instalacao | date | Data de instalação |
-| geracao_estimada_mensal_kwh | decimal | Estimativa mensal (kWh) |
-| ativa, arquivada | boolean | Status |
-
-**Interligações:**
-- `unidades_consumidoras.empresa_id` → `empresas.id`
-- `unidades_consumidoras.id` ← `dados_geracao.uc_id`
-- `unidades_consumidoras.id` ← `faturas.uc_id`
-- `unidades_consumidoras.id` ← `relatorios.uc_id`
-
-**Exportação:** CSV via tabela de UCs
-
----
-
-### 3.5 Gestão de Faturas (Admin + Cliente)
-
-**O que faz:** Admin insere dados de fatura manualmente com campos detalhados de energia fora ponta. Cliente faz upload de imagem/PDF da fatura.
-
-#### Fluxo Admin (inserção manual):
-1. Admin acessa `/admin/faturas/nova`
-2. Seleciona UC e mês de referência
-3. Preenche campos de identificação (denominação, contrato, ciclo)
-4. Preenche campos de Energia Fora Ponta (energia faturada, tarifa, compensada, consumida, injetada)
-5. Preenche valores totais (valor faturado, consumo, economia)
-6. Anexa PDF via drag & drop (upload para Supabase Storage)
-7. Status = "processada"
-
-#### Fluxo Cliente (upload):
-1. Cliente acessa `/cliente/fatura`
-2. Seleciona UC e mês de referência
-3. Arrasta imagem/PDF (JPG, PNG, PDF — máx. 10MB)
-4. Preview da imagem antes de confirmar
-5. Upload para Supabase Storage em `faturas/{empresaId}/{ucId}/{mes}.{ext}`
-6. Status = "pendente" (aguarda processamento pelo admin)
-7. Lista de faturas enviadas com status
-
-**Dados necessários (tabela `faturas`):**
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| uc_id | uuid | UC da fatura |
-| mes_referencia | date | Primeiro dia do mês |
-| denominacao | text | Denominação na fatura |
-| contrato | text | Número do contrato |
-| valor_faturado | decimal(10,2) | Valor faturado (R$) |
-| inicio_ciclo | date | Início do ciclo |
-| fim_ciclo | date | Fim do ciclo |
-| energia_faturada_fp | decimal(10,2) | Energia faturada Fora Ponta (kWh) |
-| valor_tarifa_fp | decimal(10,6) | Tarifa Fora Ponta (R$/kWh) |
-| kwh_compensado_fp | decimal(10,2) | kWh compensado Fora Ponta |
-| tarifa_compensada_fp | decimal(10,6) | Tarifa da compensada FP (R$/kWh) |
-| energia_consumida_fp | decimal(10,2) | Energia consumida Fora Ponta (kWh) |
-| energia_injetada_fp | decimal(10,2) | Energia injetada Fora Ponta (kWh) |
-| valor_total | decimal(10,2) | Valor total da fatura (R$) |
-| consumo_kwh | decimal(10,2) | Consumo total (kWh) |
-| economia_estimada | decimal(10,2) | Economia estimada (R$) |
-| pdf_url | text | URL do PDF da fatura |
-| imagem_url | text | URL da imagem (upload do cliente) |
-| status | 'pendente' \| 'processada' \| 'erro' | Status do processamento |
-| inserido_por | uuid | FK para quem inseriu |
-
-**Página de detalhes:** `/admin/faturas/[id]` mostra todos os campos organizados em cards: Identificação, Energia Fora Ponta, Valores e totais. Botões para baixar PDF e ver imagem.
-
-**Exportação:** CSV com empresa, UC, mês, contrato, valor, consumo, status
-
----
-
-### 3.6 Gestão de Relatórios (Admin)
-
-**O que faz:** Admin gera relatórios por UC/período, acompanha status de envio. Cliente vê apenas relatórios enviados.
-
-**Fluxo de geração:**
-1. Admin acessa `/admin/relatorios` → lista com busca e filtro por status
-2. Clica "Gerar relatório" → seleciona UC e mês
-3. Sistema busca automaticamente:
-   - Dados da UC (código, empresa, geração estimada)
-   - Dados de geração do período (`dados_geracao`)
-   - Fatura do período (economia estimada)
-4. Cria relatório com título formatado: "Relatório {mês} {ano} - {código UC}"
-5. Status = "pendente"
-6. Admin marca como "enviado" quando entrega ao cliente
-
-**Dados necessários (tabela `relatorios`):**
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| uc_id | uuid | UC do relatório |
-| empresa_id | uuid | Empresa (desnormalizado) |
-| mes_referencia | date | Mês/ano de referência |
-| titulo | text | Título do relatório |
-| pdf_url | text | URL do PDF gerado |
-| geracao_kwh | decimal | Geração do período |
-| geracao_estimada_kwh | decimal | Estimado |
-| economia_reais | decimal | Economia (R$) |
-| indice_performance | 'bom' \| 'regular' \| 'ruim' | Indicador |
-| status_envio | 'pendente' \| 'enviado' \| 'erro' | Status |
-| gerado_por | 'automatico' \| 'manual' | Como foi gerado |
-| fatura_id | uuid (nullable) | Fatura usada como base |
-
-**Interligações:**
-- Relatório puxa dados de `dados_geracao` e `faturas` do mesmo período/UC
-- `relatorios.fatura_id` → `faturas.id` (opcional)
-- Cliente vê apenas `status_envio = 'enviado'`
-
-**Exportação:** CSV com empresa, UC, mês, geração, economia, performance, status
-
----
-
-### 3.7 Tabela Tarifária (Admin)
-
-**O que faz:** Admin gerencia tarifas TUSD/TE por distribuidora e posto tarifário, com edição parcial campo a campo.
-
-**Fluxo:**
-1. Admin acessa `/admin/tarifas` → lista com busca por distribuidora e filtro por modalidade
-2. Cria tarifa: distribuidora, modalidade, posto tarifário, TUSD, TE, vigência
-3. `valor_total` é calculado automaticamente (TUSD + TE)
-4. **Edição inline:** clica no valor de TUSD ou TE na tabela para editar individualmente
-5. Ao salvar campo individual, `valor_total` é recalculado
-6. Vigência: `vigencia_inicio` obrigatório, `vigencia_fim` define se está expirada
-
-**Dados necessários (tabela `tarifas`):**
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| distribuidora | text | Nome da distribuidora |
-| modalidade | 'convencional' \| 'branca' \| 'verde' \| 'azul' | Modalidade |
-| posto_tarifario | 'ponta' \| 'fora_ponta' \| 'intermediario' \| 'unico' | Posto |
-| valor_tusd | decimal(10,6) | TUSD (R$/kWh) |
-| valor_te | decimal(10,6) | TE (R$/kWh) |
-| valor_total | decimal(10,6) | TUSD + TE (calculado) |
-| vigencia_inicio | date | Início da vigência |
-| vigencia_fim | date (nullable) | Fim (null = vigente) |
-| ativa | boolean | Vigente ou expirada |
-
-**Exportação:** CSV com distribuidora, modalidade, posto, TUSD, TE, total, vigência, status
-
----
-
-### 3.8 Dashboard do Cliente
-
-**O que faz:** Dashboard principal com KPIs de geração, economia e performance, e gráfico comparativo dos últimos 12 meses.
-
-**Fluxo:**
-1. Cliente acessa `/cliente/dashboard`
-2. Sistema identifica empresa(s) acessíveis:
-   - **Matriz:** agrega dados da própria empresa + todas as filiais
-   - **Filial:** apenas seus próprios dados
-3. Busca UCs ativas de todas as empresas acessíveis
-4. Para o mês selecionado (ou atual), calcula:
-   - **Geração total:** soma de `dados_geracao.geracao_kwh` de todas as UCs
-   - **Estimado:** soma de `dados_geracao.geracao_estimada_kwh`
-   - **Economia:** soma de `faturas.economia_estimada`
-   - **Performance:** média de `performance_ratio`
-     - ≥ 80% → Bom (verde)
-     - ≥ 60% → Regular (amarelo)
-     - < 60% → Ruim (vermelho)
-5. Gráfico: barras de geração real vs estimado (últimos 12 meses)
-
-**Dados necessários:**
-- `dados_geracao`: geracao_kwh, geracao_estimada_kwh, performance_ratio, indice_performance
-- `faturas`: economia_estimada
-- `unidades_consumidoras`: geracao_estimada_mensal_kwh
-- `empresas`: tipo (para determinar acesso matriz/filial)
-
-**Filtros:** Seletor de mês/ano para mudar o período exibido nos cards
-
----
-
-### 3.9 Dashboard do Admin
-
-**O que faz:** Visão geral do sistema com contadores globais e dados individuais por empresa.
-
-**Cards de overview:**
-- Total de empresas (não-arquivadas)
-- Total de UCs (não-arquivadas)
-- Relatórios pendentes (`status_envio = 'pendente'`)
-- Faturas pendentes (`status = 'pendente'`)
-
-**Seção "Dados por empresa":** Para cada empresa ativa, mostra:
-- Nome da empresa
-- Badge de performance (se disponível)
+**Dados por cliente:** Grid com card para cada empresa ativa mostrando:
+- Nome da empresa + badge de performance (Bom/Regular/Ruim)
 - Geração total do mês (kWh)
-- Economia total do mês (R$)
+- Economia do mês (R$)
 - Quantidade de UCs
 - Relatórios pendentes
-- Link para detalhes da empresa
+- Link "Ver detalhes" → página da empresa
+
+**Geração Mensal:** Componente `SolisGeracaoMensal` que permite selecionar empresa → UC → mês e visualizar dados diários de geração com gráfico de barras.
 
 ---
 
-### 3.10 Histórico de Relatórios (Cliente)
+### 3.2 Clientes (`/admin/clientes`)
 
-**O que faz:** Lista de relatórios mensais enviados pela equipe Lumix, com download de PDF.
+CRUD completo de empresas clientes.
 
-**Fluxo:**
-1. Cliente acessa `/cliente/historico`
-2. Busca relatórios com `status_envio = 'enviado'` para todas as empresas acessíveis
-3. Exibe lista ordenada por data (mais recente primeiro)
-4. Cada item mostra: mês, UC, geração, economia, performance, botão download PDF
-5. Empty state quando não há relatórios
+**Listagem:**
+- Busca por nome ou CNPJ
+- Filtro por status (ativas/inativas/arquivadas)
+- Export CSV
 
-**Dados necessários:**
-- `relatorios`: titulo, mes_referencia, geracao_kwh, economia_reais, indice_performance, pdf_url
-- Filtrado por `empresa_id` IN (empresas acessíveis) e `status_envio = 'enviado'`
+**Cadastro (`/admin/clientes/novo`):**
+- **CNPJ com auto-preenchimento:** consulta BrasilAPI → preenche nome, cidade, estado
+- **CEP com auto-preenchimento:** consulta ViaCEP → preenche endereço
+- **Validação CNPJ:** algoritmo de dígitos verificadores
+- Campos: nome, CNPJ, tipo (matriz/filial), endereço completo, telefone, email, responsável
 
----
+**Detalhes (`/admin/clientes/[id]`):**
 
-### 3.11 Dados da Usina (Cliente)
+1. **Informações da empresa** — dados cadastrais
+2. **Usuários** — gerenciamento de acessos:
+   - Máximo **2 usuários** por empresa
+   - Criar: nome, email, senha (min 6 chars), telefone
+   - Resetar senha (inline)
+   - Excluir com confirmação
+3. **Unidades consumidoras** — lista de UCs vinculadas + botão para vincular novas usinas
+4. **Filiais** — se for matriz, mostra empresas filiais vinculadas
 
-**O que faz:** Exibição somente leitura dos dados cadastrais e técnicos das UCs.
-
-**Fluxo:**
-1. Cliente acessa `/cliente/usina`
-2. Busca UCs ativas de todas as empresas acessíveis
-3. Exibe em 3 cards por UC:
-   - **Dados cadastrais:** titular, código, distribuidora, endereço, enquadramento, modalidade
-   - **Equipamentos:** potência, módulos (qtd x modelo), inversores (qtd x modelo)
-   - **Geração:** estimativa mensal, data de instalação, observações
-
-**Dados necessários:**
-- `unidades_consumidoras`: todos os campos técnicos
-- Nenhum botão de edição — somente leitura
+**Estrutura Matriz/Filial:**
+- Campo `tipo`: "matriz" ou "filial"
+- Filial aponta para matriz via `matriz_id`
+- No portal do cliente, se a empresa for matriz, agrega dados de todas as filiais
 
 ---
 
-### 3.12 Exportação CSV
+### 3.3 Grupos Empresariais (`/admin/grupos`)
 
-**O que faz:** Exporta os dados da tabela atual para arquivo CSV (compatível com Excel).
+Agrupamentos lógicos de empresas para organização interna da equipe Lumix.
 
-**Disponível em:**
-- Lista de clientes (empresas)
-- Lista de unidades consumidoras
-- Lista de faturas
-- Lista de relatórios
-- Lista de tarifas
+**Funcionalidades:**
+- Criar grupo (campo nome)
+- Renomear grupo (edição inline com ícone de lápis)
+- Excluir grupo (com confirmação "Confirmar"/"Não")
+- Cada card mostra: nome do grupo, badge com quantidade de empresas, lista de empresas vinculadas com CNPJ e status
 
-**Implementação:**
-- Geração client-side via `lib/export-csv.ts`
-- UTF-8 BOM para compatibilidade com Excel
-- Exporta dados filtrados (respeita busca/filtros aplicados)
+**Busca:** filtra por nome do grupo, nome da empresa ou CNPJ.
 
 ---
 
-## 4. Modelo de Dados e Relacionamentos
+### 3.4 Unidades Consumidoras (`/admin/unidades`)
+
+Lista todas as usinas detectadas nos provedores (Solis e SunGrow), lidas do cache local (`usinas_cache`).
+
+**Listagem dividida por provedor:**
+- Seção **Solis** com contagem
+- Seção **SunGrow** com contagem
+
+**Filtros:**
+- Busca por nome da usina
+- Filtro por empresa
+- Filtro por status: vinculadas / não vinculadas / com tarifa / sem tarifa
+- Filtro por provedor
+
+**Vinculação:** Ao vincular uma usina do provedor a uma empresa:
+1. Cria registro em `unidades_consumidoras` com dados técnicos do provedor
+2. Cria vínculo em `uc_stations` (junction table UC ↔ station_id)
+3. Se UC com mesmo nome já existe na empresa → vincula station adicional (multi-provedor)
+
+**Detalhes da UC (`/admin/unidades/[id]`):**
+
+Página com 4 seções editáveis:
+
+**a) Classificação Tarifária:**
+- Grupo tarifário: Grupo A / Grupo B / ACL (Mercado Livre)
+- Subgrupo: A1-A4, AS, B1-B4 (cascata filtrada pelo grupo)
+- Concessionária: sigla (ex: CEMIG, RGE)
+- Modalidade tarifária: Verde, Azul, Convencional, Branca
+- **Para ACL:** campo adicional "Contrato ACL (R$/MWh)" — preço negociado do mercado livre
+- **Preview de tarifas:** mostra tarifas ANEEL vigentes para a combinação selecionada
+
+**b) Parâmetros de Geração Estimada:**
+- Fator de rendimento (ex: 0.95 — perdas de sombreamento, orientação, cabeamento)
+- Degradação 1º ano (ex: 0.02 = 2%)
+- Degradação anual seguinte (ex: 0.006 = 0,6%)
+- Warning se algum campo estiver vazio: "Geração estimada não será calculada"
+
+**c) Dados Técnicos** (somente leitura):
+- Potência instalada (kWp), quantidade e modelo de inversores
+- Data de instalação, geração estimada mensal (valor estático)
+
+**d) Observações:** campo livre
+
+---
+
+### 3.5 Relatórios (`/admin/relatorios`)
+
+Listagem de relatórios mensais por UC.
+
+**Tabela:**
+- Cliente, UC, Tipo (Real/Estimado), Mês, Geração (kWh), Economia (R$)
+- **Performance:** PR percentual + badge classificação (Bom/Regular/Ruim)
+  - Ex: "PR 85%" + badge "Ruim"
+  - Calculado de `geracao_kwh / geracao_estimada_kwh × 100`
+- Status de envio (Pendente/Enviado/Erro)
+- Ações: marcar como enviado, baixar PDF, substituir anexo, arquivar
+
+**Componente Geração Mensal:**
+
+1. Selecionar empresa → UC → mês
+2. Clicar "Buscar"
+3. Sistema busca dados diários de geração (consolidando múltiplos provedores se houver)
+
+**Cards exibidos:**
+- Geração total (kWh), Média diária, Melhor dia, Projeção mês
+- Performance PR (percentual + classificação Bom/Regular/Ruim)
+- Geração estimada (kWh) — calculada pelo sistema com GHI + parâmetros da UC
+
+**Gráfico de barras diário:**
+- Cores: verde (yield ≥2.0), âmbar (1.0-2.0), vermelho (<1.0)
+- Linha de referência: média diária
+
+**Botão "Gerar Relatório":** envia dados para n8n gerar o PDF.
+
+---
+
+### 3.6 Faturas (`/admin/faturas`)
+
+**Inserir fatura (`/admin/faturas/nova`):**
+- Seleção: UC + mês de referência
+- Campos: denominação, contrato, ciclo, energia fora ponta (kWh, tarifas), valores, consumo, créditos, TUSD, TE, economia estimada
+- Upload de PDF opcional
+- Ao salvar: dispara webhook para processamento no n8n
+
+---
+
+### 3.7 Faturas Processadas (`/admin/faturas-processadas`)
+
+Faturas extraídas automaticamente via OCR (LlamaParse + Gemini) no n8n.
+
+**Status:** Extraindo → Extraído → Gerando → Gerado / Erro
+
+**Campos editáveis agrupados:**
+
+| Grupo | Campos |
+|-------|--------|
+| Consumo (kWh) | consumo_total, consumo_ponta*, consumo_fora_ponta* |
+| Geração e créditos (kWh) | energia_injetada, consumo_injetado_mesma_uc, consumo_injetado_outra_uc, credito_acumulado |
+| Valores (R$) | valor_total_fatura, VTO.CI |
+| Geração compartilhada | toggle sim/não + evidência (somente leitura) |
+| Dados da fatura | número_fatura, data_vencimento |
+| Observação | textarea livre (aparece no rodapé do relatório) |
+
+*\* Campos ponta/fora ponta aparecem apenas para Grupo A*
+
+**Fluxo de regeração:** Admin edita campos → confirmação → n8n gera novo HTML → Gotenberg converte em PDF → sobrescreve anterior.
+
+---
+
+### 3.8 Tarifas ANEEL (`/admin/tarifas`)
+
+Tarifas TUSD + TE por concessionária, subgrupo, modalidade e posto tarifário. Valores em R$/kWh (6 casas decimais), **sem impostos**. Import via planilha ANEEL. Vigência temporal.
+
+### 3.9 Impostos (`/admin/impostos`)
+
+Alíquotas ICMS, PIS, COFINS por concessionária + UF. Fator gross-up calculado: `1 / (1 - ICMS - PIS - COFINS)`. Cadastro manual com vigência temporal.
+
+### 3.10 Alertas (`/admin/alertas`)
+
+Alarmes dos inversores Solis/SunGrow sincronizados via cron n8n. Níveis: Dica (azul), Geral (âmbar), Emergência (vermelho). Badge na sidebar com contagem de ativos (polling 5min).
+
+---
+
+## 4. Portal do Cliente
+
+### 4.1 Dashboard (`/cliente/dashboard`)
+
+**Cards:** Geração total (kWh), Estimado (kWh), Economia (R$), Performance (Bom/Regular/Ruim + PR%).
+**Gráfico:** Barras duplas (real vs estimado) dos últimos 12 meses.
+**Lógica matriz/filial:** empresa matriz agrega dados de todas as filiais.
+
+### 4.2 Histórico (`/cliente/historico`)
+
+Relatórios enviados pela equipe Lumix. Cada um mostra mês, UC, geração, economia, PR percentual ("X% do potencial atingido") e botão download PDF.
+
+### 4.3 Usina (`/cliente/usina`)
+
+Dados técnicos da usina (somente leitura): potência, módulos, inversores, data de instalação.
+
+### 4.4 Upload de Fatura (`/cliente/fatura`)
+
+Drag-and-drop de fatura (JPG, PNG, PDF — máx 10MB). Seleciona UC e mês. Ao enviar: salva no Storage, cria registro, dispara webhook OCR. Histórico de uploads com status.
+
+---
+
+## 5. Cálculos do Sistema
+
+### 5.1 Geração Estimada Mensal (kWh)
 
 ```
-profiles ──── pertence a ────→ empresas
-                                  │
-                          ┌───────┼───────┐
-                          │       │       │
-                       filiais  UCs    relatórios
-                          │       │
-                          │   ┌───┼───┐
-                          │   │       │
-                       dados_geracao  faturas
-                                        │
-                                    relatórios (fatura_id)
-
-tarifas (independente — referência por distribuidora)
+Geração Estimada = Potência (kWp)
+                 × GHI (Wh/m²/dia) ÷ 1000
+                 × Dias no mês
+                 × Fator de rendimento
+                 × (1 − Degradação acumulada)
 ```
 
-### Cardinalidades
-- 1 empresa → N profiles (máx. 2 clientes)
-- 1 empresa → N unidades_consumidoras
-- 1 empresa → N filiais (auto-referência)
-- 1 UC → N dados_geracao (1 por mês)
-- 1 UC → N faturas (1 por mês)
-- 1 UC → N relatórios
-- 1 relatório → 0..1 fatura (opcional)
+| Variável | Fonte | Exemplo |
+|----------|-------|---------|
+| Potência (kWp) | UC cadastrada | 50 |
+| GHI | Tabela `ghi_municipios` (5569 municípios) | 4285 Wh/m²/dia |
+| Dias no mês | Calculado dinamicamente | 31 |
+| Fator rendimento | UC cadastrada | 0.95 |
+| Degradação | Calculada pela idade (ver abaixo) | 0.026 |
 
-### Restrições de Unicidade
-- `empresas.cnpj` — UNIQUE
-- `(uc_id, mes_referencia)` em `dados_geracao` — UNIQUE
-- `(uc_id, mes_referencia)` em `faturas` — UNIQUE
-- `(distribuidora, modalidade, posto_tarifario, vigencia_inicio)` em `tarifas` — UNIQUE
+**Fallback GHI:** Se município não encontrado → média do estado (UF) via RPC `ghi_media_uf`.
 
----
-
-## 5. Segurança
-
-### Row Level Security (RLS)
-Todas as 7 tabelas têm RLS habilitado. Funções `SECURITY DEFINER` (`get_user_role()`, `get_user_empresa_id()`) evitam recursão.
-
-| Tabela | Admin | Cliente |
-|--------|-------|---------|
-| profiles | CRUD total | Lê/edita apenas seu próprio |
-| empresas | CRUD total | Lê apenas sua empresa + filiais |
-| unidades_consumidoras | CRUD total | Lê apenas UCs da sua empresa |
-| dados_geracao | CRUD total | Lê apenas dados das suas UCs |
-| faturas | CRUD total | Lê suas + insere para suas UCs |
-| relatorios | CRUD total | Lê apenas status_envio='enviado' |
-| tarifas | CRUD total | Lê todas (referência) |
-
-### Validações
-- CNPJ: algoritmo de dígitos verificadores (client + server)
-- Senhas: mínimo 6 caracteres
-- Uploads: tipos permitidos (JPG, PNG, PDF), tamanho máx. 10MB
-- Valores monetários: `decimal(10,2)` — nunca float
-- Tarifas: `decimal(10,6)` para precisão em R$/kWh
-- Defense in depth: filtro por `empresa_id` nas queries + RLS no banco
-
----
-
-## 6. Acesso Matriz/Filial
-
-### Lógica de Acesso
-Implementada via `getEmpresaIdsAcessiveis(empresaId)`:
+### 5.2 Degradação Acumulada
 
 ```
-Se empresa.tipo == 'matriz':
-  retorna [empresa_id, filial_1_id, filial_2_id, ...]
-  
-Se empresa.tipo == 'filial':
-  retorna [empresa_id]  (apenas sua própria)
+Se idade < 1 ano:  degradação = degradacao_ano_zero
+Se idade ≥ 1 ano:  degradação = degradacao_ano_zero + (anos_completos − 1) × degradacao_anos_seguintes
 ```
 
-### Impacto nas Queries
-Todas as queries do cliente usam `.in("empresa_id", empresaIds)`:
-- Dashboard: agrega geração/economia de todas as empresas acessíveis
-- Usina: mostra UCs de todas as empresas acessíveis
-- Histórico: mostra relatórios de todas as empresas acessíveis
-- Faturas: mostra faturas de todas as UCs acessíveis
+Exemplo: instalada jan/2024, referência jun/2026 = 2 anos completos.
+`0.02 + (2−1) × 0.006 = 0.026` (2,6%)
+
+### 5.3 Performance Ratio (PR)
+
+```
+PR (%) = (Geração Real ÷ Geração Estimada) × 100
+```
+
+| PR | Classificação | Cor |
+|----|--------------|-----|
+| ≥ 98% | Bom | Verde |
+| 90% a 97% | Regular | Âmbar |
+| < 90% | Ruim | Vermelho |
+
+Exibição: "85% do potencial da usina foi atingido — Ruim"
+
+### 5.4 Fator de Impostos (Gross-up)
+
+```
+Fator = 1 ÷ (1 − ICMS − PIS − COFINS)
+```
+
+Exemplo: ICMS=18%, PIS=1,65%, COFINS=7,6% → Fator = **1,3745**
+
+Tarifas ANEEL são sem impostos. Multiplicar pelo fator para obter tarifa real.
+
+### 5.5 Economia Estimada por Grupo Tarifário
+
+| Grupo | Fórmula | Observação |
+|-------|---------|-----------|
+| **B** | `Geração × (TUSD + TE) × Fator Imposto` | Tarifa única, sem horário |
+| **A** | `Geração × (TUSD_fp + TE_fp) × Fator Imposto` | Usa fora ponta (período diurno) |
+| **ACL** | `Geração × (TUSD_fp × Fator + Contrato ACL ÷ 1000)` | Contrato já inclui impostos |
+
+### 5.6 Economia Real (Relatório de Fatura)
+
+```
+Autoconsumo (kWh) = Geração Real − Energia Injetada
+Economia Real (R$) = Autoconsumo × Tarifa com Impostos + VTO.CI
+```
 
 ---
 
-## 7. Integrações Externas
+## 6. Banco de Dados — Todas as Tabelas
 
-| Serviço | Uso | Status |
-|---------|-----|--------|
-| Supabase Auth | Autenticação email/senha | Ativo |
-| Supabase Storage | Upload de imagens/PDFs de fatura | Ativo |
-| BrasilAPI | Consulta CNPJ (auto-fill empresa) | Ativo |
-| ViaCEP | Consulta CEP (auto-fill endereço) | Ativo |
-| IBGE | Lista de cidades por UF | Ativo |
-| API OCR (TBD) | Processamento de imagem de fatura | Futuro |
-| Gerador de PDF (TBD) | Geração de PDF de relatório | Futuro |
+| Tabela | Propósito |
+|--------|-----------|
+| `profiles` | Perfil do usuário: role (admin/cliente), empresa_id |
+| `empresas` | Empresas clientes com suporte matriz/filial |
+| `unidades_consumidoras` | UCs com dados técnicos, parâmetros de estimativa, classificação tarifária, contrato ACL |
+| `dados_geracao` | Geração mensal por UC: real, estimada, PR, performance |
+| `faturas` | Faturas de energia (manual ou upload) |
+| `faturas_processadas` | Faturas extraídas via OCR com campos editáveis |
+| `relatorios` | Relatórios mensais com geração, economia, performance |
+| `usinas_cache` | Cache de usinas Solis/SunGrow (sync via n8n cron) |
+| `uc_stations` | Junção UC ↔ station_id (multi-provedor) |
+| `ghi_municipios` | Irradiação solar por município (5569 registros) |
+| `tarifas_aneel` | Tarifas TUSD/TE por concessionária (sem impostos) |
+| `impostos_concessionaria` | Alíquotas ICMS/PIS/COFINS por concessionária |
+| `alertas_cache` | Alarmes dos inversores |
+| `grupos_empresariais` | Agrupamentos lógicos de empresas |
 
 ---
 
-## 8. Variáveis de Ambiente
+## 7. Webhooks — Payloads Completos
+
+Todos em `https://n8n-n8n.nt4zcb.easypanel.host/`. Auth: Basic Auth (N8N_API_USER/N8N_API_PASSWORD).
+
+### 7.1 Gerar Relatório de Geração
+
+**Endpoint:** `/webhook/7d6333a5-5c73-4be8-a3e3-937238d4f3a8` (POST)
+
+```json
+{
+  "station_id": "1298491919450374165",
+  "month": "2026-05",
+  "usina": {
+    "station_id": "1298491919450374165",
+    "station_name": "Cerâmica São Pedro",
+    "capacity_kwp": 50
+  },
+  "periodo": {
+    "mes": "2026-05",
+    "mes_extenso": "Maio/2026",
+    "data_inicio": "2026-05-01",
+    "data_inicio_br": "01/05/2026",
+    "data_fim": "2026-05-31",
+    "data_fim_br": "31/05/2026",
+    "dias_com_dados": 31,
+    "dias_do_mes": 31
+  },
+  "totais": {
+    "geracao_kwh": 3297.6,
+    "grid_sell_kwh": 0,
+    "grid_purchased_kwh": 0,
+    "home_load_kwh": 3297.6
+  },
+  "metricas": {
+    "media_diaria_kwh": 106.4,
+    "mediana_diaria_kwh": 106.8,
+    "melhor_dia": { "date": "2026-05-01", "date_br": "01/05/2026", "geracao_kwh": 190.6 },
+    "pior_dia": { "date": "2026-05-09", "date_br": "09/05/2026", "geracao_kwh": 13.3 },
+    "pr_medio": 2.13,
+    "pr_max": 3.81,
+    "pr_min": 0.27,
+    "dias_abaixo_pr1": 6
+  },
+  "projecao": { "kwh_mes_completo": 3298, "completude_pct": 100 },
+  "dias": [
+    { "date": "2026-05-01", "date_br": "01/05/2026", "geracao_kwh": 190.6, "performance_ratio": 3.81 }
+  ],
+  "estimativa": {
+    "geracao_estimada_kwh": 3850.42,
+    "pr_percentual": 85.64,
+    "pr_classificacao": "Ruim",
+    "pr_texto": "86% do potencial da usina foi atingido — Ruim",
+    "degradacao_acumulada": 0.026,
+    "ghi_wh_m2_dia": 4285
+  },
+  "uc_info": {
+    "grupo_tarifario": "grupo_b",
+    "subgrupo": "B1",
+    "concessionaria_sigla": "RGE",
+    "modalidade_tarifaria_aneel": null,
+    "contrato_acl_rs_mwh": null,
+    "codigo_uc": "UC-12345"
+  },
+  "tarifas": { "grupo": "grupo_b", "tusd": 0.384521, "te": 0.298743 },
+  "tarifas_com_impostos": { "tusd": 0.528523, "te": 0.410612 },
+  "impostos": {
+    "icms_aliquota": 0.18,
+    "pis_aliquota": 0.0165,
+    "cofins_aliquota": 0.076,
+    "fator_imposto": 1.3745
+  },
+  "economia": {
+    "economia_estimada_rs": 3095.12,
+    "formula": "3297.6 kWh × R$ 0.939135/kWh (TUSD + TE com impostos, fator 1.3745)"
+  }
+}
+```
+
+**Variação Grupo A:**
+```json
+{
+  "uc_info": { "grupo_tarifario": "grupo_a", "subgrupo": "A4", "modalidade_tarifaria_aneel": "Verde" },
+  "tarifas": { "grupo": "grupo_a", "tusd_ponta": 1.234, "te_ponta": 0.567, "tusd_fora_ponta": 0.384, "te_fora_ponta": 0.298 },
+  "tarifas_com_impostos": { "tusd_ponta": 1.697, "te_ponta": 0.780, "tusd_fora_ponta": 0.528, "te_fora_ponta": 0.410 }
+}
+```
+
+**Variação ACL:**
+```json
+{
+  "uc_info": { "grupo_tarifario": "acl", "contrato_acl_rs_mwh": 280.00 },
+  "tarifas": { "grupo": "acl", "tusd_fora_ponta": 0.384 },
+  "tarifas_com_impostos": { "tusd_fora_ponta": 0.528 },
+  "economia": { "economia_estimada_rs": 2665.89, "formula": "3297.6 kWh × R$ 0.808/kWh (TUSD_fp + ACL)" }
+}
+```
+
+### 7.2 Processar Fatura (Upload)
+
+**Endpoint:** `/webhook/1f12ba76-a38d-4a8f-9441-db04f017c72f` (POST)
+
+```json
+{
+  "fatura_id": "uuid",
+  "uc_id": "uuid",
+  "mes_referencia": "2026-05-01",
+  "arquivo_url": "https://xxx.supabase.co/storage/.../fatura.pdf",
+  "role": "admin",
+  "user_id": "uuid"
+}
+```
+
+### 7.3 Regerar Relatório de Fatura
+
+**Endpoint:** mesmo do 7.2 (POST)
+
+```json
+{
+  "fatura_id": "uuid",
+  "campos_editados": {
+    "consumo_total_kwh": 1234.56,
+    "energia_injetada_kwh": 480.00,
+    "consumo_injetado_mesma_uc_kwh": 480.00,
+    "credito_acumulado_kwh": 120.00,
+    "valor_total_fatura_rs": 850.40,
+    "vto_ci_rs": 312.80,
+    "tem_geracao_compartilhada": false,
+    "numero_fatura": "123456789",
+    "data_vencimento": "2026-05-15",
+    "observacao": "Dados ajustados manualmente."
+  },
+  "admin_id": "uuid"
+}
+```
+
+### 7.4 Geração Mensal (busca dados)
+
+| Provedor | Endpoint |
+|----------|----------|
+| Solis | `/webhook/solis-geracao-mensal?month=YYYY-MM&station_id=X` |
+| SunGrow | `/webhook/geracao-mensal-sungrow?month=YYYY-MM&station_id=X` |
+
+### 7.5 Alertas (cron automático)
+
+| Endpoint | Propósito |
+|----------|-----------|
+| `/webhook/sync-alarmes` | Sync alarmes Solis |
+| `/webhook/sync-alarmes-sungrow` | Sync alarmes SunGrow |
+
+---
+
+## 8. Formatação e Padrões
+
+| Função | Formato | Exemplo |
+|--------|---------|---------|
+| `formatCNPJ` | XX.XXX.XXX/XXXX-XX | 12.345.678/0001-90 |
+| `formatCurrency` | R$ X.XXX,XX | R$ 3.095,12 |
+| `formatKWh` | X.XXX,XX kWh | 3.297,60 kWh |
+| `formatDate` | DD/MM/YYYY | 01/06/2026 |
+| `formatMesReferencia` | mês extenso + ano | janeiro 2026 |
+
+---
+
+## 9. Limitações Conhecidas
+
+| Área | Limitação |
+|------|-----------|
+| PDF de relatórios | Gerado pelo n8n/Gotenberg, não pelo sistema |
+| Notificações | Sem envio automático de email/WhatsApp |
+| Usuários por empresa | Máximo 2 (hardcoded) |
+| Dashboard tempo real | Sem WebSocket — precisa refresh |
+| Ações em lote | Sem seleção múltipla |
+| Exportação | Apenas CSV |
+| URLs webhooks | Hardcoded no código |
+| PR no dashboard | Média aritmética simples |
+| Contrato ACL | Campo único (sem histórico anual) |
+| PIS/COFINS | Atualização manual mensal |
+| Dark mode | Não implementado |
+| Idioma | Apenas pt-BR |
+| Backup PDF | Regeração sobrescreve sem backup |
+| Concorrência | Last-write-wins (sem lock) |
+
+---
+
+## 10. Variáveis de Ambiente
 
 | Variável | Propósito | Exposta ao browser? |
-|----------|-----------|---------------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | URL do projeto Supabase | Sim |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Chave anon (respeitada pelo RLS) | Sim |
-| `SUPABASE_SERVICE_ROLE_KEY` | Chave admin (bypassa RLS) | Não |
+|----------|-----------|-------------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | URL do Supabase | Sim |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Chave anon | Sim |
+| `SUPABASE_SERVICE_ROLE_KEY` | Admin server-side | Não |
+| `N8N_API_USER` | Usuário Basic Auth n8n | Não |
+| `N8N_API_PASSWORD` | Senha Basic Auth n8n | Não |
 
-Arquivo: `env/.env.local` (nunca commitar)
-
----
-
-## 9. Estrutura de Rotas
-
-### Públicas
-| Rota | Descrição |
-|------|-----------|
-| `/login` | Login |
-| `/signup` | Criação de conta |
-| `/reset-password` | Recuperação de senha |
-
-### Admin (`/admin/*`)
-| Rota | Descrição |
-|------|-----------|
-| `/admin/dashboard` | Visão geral + dados por empresa |
-| `/admin/clientes` | Lista de empresas |
-| `/admin/clientes/novo` | Cadastrar empresa |
-| `/admin/clientes/[id]` | Detalhes + usuários + UCs + filiais |
-| `/admin/clientes/[id]/editar` | Editar empresa |
-| `/admin/unidades` | Lista de UCs |
-| `/admin/unidades/nova` | Cadastrar UC |
-| `/admin/unidades/[id]` | Detalhes da UC |
-| `/admin/unidades/[id]/editar` | Editar UC |
-| `/admin/faturas` | Lista de faturas |
-| `/admin/faturas/nova` | Inserir fatura (manual) |
-| `/admin/faturas/[id]` | Detalhes da fatura |
-| `/admin/relatorios` | Lista de relatórios |
-| `/admin/tarifas` | Tabela tarifária (com edição inline) |
-
-### Cliente (`/cliente/*`)
-| Rota | Descrição |
-|------|-----------|
-| `/cliente/dashboard` | Dashboard com KPIs e gráfico |
-| `/cliente/historico` | Relatórios enviados + download PDF |
-| `/cliente/usina` | Dados técnicos da UC (read-only) |
-| `/cliente/fatura` | Upload de fatura + lista de enviadas |
-
----
-
-## 10. Funcionalidades Futuras (Pós-MVP)
-
-- **OCR automático de faturas:** API externa processa imagem → preenche `dados_extraidos` (JSONB)
-- **Geração automática de relatórios:** trigger na criação de fatura
-- **Notificações por email:** envio de relatórios ao cliente
-- **Geração de PDF:** serviço para gerar PDF formatado dos relatórios
-- **Integração com inversores:** dados de geração via API dos fabricantes
-- **Dashboard em tempo real:** Supabase Realtime para atualização live
+Arquivo local: `env/.env.local` (nunca comitar).

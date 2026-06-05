@@ -10,7 +10,9 @@ import {
   Wifi,
   ChevronDown,
   ChevronUp,
+  Search,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { ProviderFilterTabs, type ProviderFilter } from "@/components/shared/ProviderFilter";
@@ -174,6 +176,7 @@ export function AlertaList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [provider, setProvider] = useState<ProviderFilter>("todos");
+  const [busca, setBusca] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -189,9 +192,21 @@ export function AlertaList() {
   }, []);
 
   const items = useMemo(() => {
-    if (provider === "todos") return allItems;
-    return allItems.filter((i) => i.provider === provider);
-  }, [allItems, provider]);
+    let filtered = allItems;
+    if (provider !== "todos") {
+      filtered = filtered.filter((i) => i.provider === provider);
+    }
+    if (busca.trim()) {
+      const termo = busca.toLowerCase();
+      filtered = filtered.filter(
+        (i) =>
+          i.station_name?.toLowerCase().includes(termo) ||
+          i.inverter_sn?.toLowerCase().includes(termo) ||
+          i.alarm_msg?.toLowerCase().includes(termo)
+      );
+    }
+    return filtered;
+  }, [allItems, provider, busca]);
 
   const summary = useMemo(() => {
     if (items.length === 0) return null;
@@ -224,7 +239,18 @@ export function AlertaList() {
 
   return (
     <div className="space-y-4">
-      <ProviderFilterTabs value={provider} onChange={setProvider} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por usina, inversor ou mensagem..."
+            className="pl-9"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+        </div>
+        <ProviderFilterTabs value={provider} onChange={setProvider} />
+      </div>
 
       {summary && <SummaryCards summary={summary} />}
 

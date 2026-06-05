@@ -6,6 +6,7 @@ import { Loader2, Zap, Activity, TrendingUp, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Combobox } from "@/components/ui/combobox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FileUpload } from "@/components/shared/FileUpload";
@@ -114,6 +115,12 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
     ? ucs.filter((uc) => uc.empresa?.id === clienteId)
     : ucs;
 
+  const clienteOptions = clientes.map((c) => ({ value: c.id, label: c.nome }));
+  const ucOptions = ucsFiltradas.map((uc) => ({
+    value: uc.id,
+    label: `${uc.codigo_uc}${uc.empresa ? ` — ${uc.empresa.nome}` : ""}`,
+  }));
+
   return (
     <form action={formAction}>
       {state?.error && (
@@ -131,35 +138,24 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
             {clientes.length > 0 && (
               <div className="space-y-2">
                 <Label>Cliente</Label>
-                <select
+                <Combobox
+                  options={clienteOptions}
                   value={clienteId}
-                  onChange={(e) => { setClienteId(e.target.value); setUcId(""); }}
-                  className={selectClass}
-                >
-                  <option value="">Todos os clientes</option>
-                  {clientes.map((c) => (
-                    <option key={c.id} value={c.id}>{c.nome}</option>
-                  ))}
-                </select>
+                  onChange={(v) => { setClienteId(v); setUcId(""); }}
+                  placeholder="Buscar cliente..."
+                />
               </div>
             )}
 
             <div className="space-y-2">
               <Label htmlFor="uc_id">Unidade consumidora *</Label>
-              <select
+              <Combobox
                 name="uc_id"
+                options={ucOptions}
                 value={ucId}
-                onChange={(e) => setUcId(e.target.value)}
-                className={selectClass}
-                required
-              >
-                <option value="">Selecione a UC</option>
-                {ucsFiltradas.map((uc) => (
-                  <option key={uc.id} value={uc.id}>
-                    {uc.codigo_uc}{uc.empresa ? ` — ${uc.empresa.nome}` : ""}
-                  </option>
-                ))}
-              </select>
+                onChange={setUcId}
+                placeholder="Buscar UC..."
+              />
             </div>
 
             <div className="space-y-2">

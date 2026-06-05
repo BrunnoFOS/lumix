@@ -49,7 +49,18 @@
       "Bash(npx -y xlsx-cli --all-sheets \"C:/Users/brunn/Downloads/data.xlsx\")",
       "Bash(npm ls:*)",
       "Bash(xargs grep:*)",
-      "Bash(grep -h \"^export\" /c/Users/brunn/lumix-projeto/lib/actions/*.ts)"
+      "Bash(grep -h \"^export\" /c/Users/brunn/lumix-projeto/lib/actions/*.ts)",
+      "Bash(npx xlsx-cli:*)",
+      "Bash(python3 -c \" import openpyxl wb = openpyxl.load_workbook\\('C:/Users/brunn/Downloads/global_horizontal_means_sedes-munic \\(3\\).xlsx', read_only=True\\) ws = wb.active for i, row in enumerate\\(ws.iter_rows\\(values_only=True\\)\\): if i < 5: print\\(row\\) \")",
+      "Bash(powershell -Command ' $excel = New-Object -ComObject Excel.Application $wb = $excel.Workbooks.Open\\('\\\\''C:\\\\Users\\\\brunn\\\\Downloads\\\\global_horizontal_means_sedes-munic \\(3\\).xlsx'\\\\''\\) $ws = $wb.Sheets.Item\\(1\\) for \\($r = 1; $r -le 5; $r++\\) { $line = '\\\\'''\\\\'' for \\($c = 1; $c -le 16; $c++\\) { $line += $ws.Cells.Item\\($r, $c\\).Text + '\\\\''|'\\\\'' } Write-Host $line } $wb.Close\\($false\\) $excel.Quit\\(\\) ')",
+      "Bash(iconv -f utf-8 -t utf-8//IGNORE)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(rm:*)",
+      "Bash(grep:*)",
+      "Bash(read dir:*)",
+      "Bash([ -f \"$dir/page.tsx\" ])",
+      "Bash([ -f \"$dir/loading.tsx\" ])",
+      "Bash(xargs ls:*)"
     ]
   }
 }

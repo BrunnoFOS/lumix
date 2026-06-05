@@ -1,5 +1,3 @@
-export const dynamic = "force-dynamic";
-
 import { Suspense } from "react";
 import { Radio, Sun } from "lucide-react";
 import { UCSearch } from "@/components/admin/UCSearch";
@@ -8,6 +6,7 @@ import { getUCs } from "@/lib/actions/unidades";
 import { getEmpresas } from "@/lib/actions/empresas";
 import { fetchSolisUCs, fetchSungrowUCs } from "@/lib/actions/solis";
 import { getOpcoesTarifarias } from "@/lib/actions/tarifas-aneel";
+import { createServerClient } from "@/lib/supabase/server";
 
 import type { UsinaUC } from "@/lib/actions/solis";
 
@@ -49,14 +48,23 @@ interface Props {
   searchParams: Promise<{ search?: string; empresa?: string; vinculacao?: string; provider?: string }>;
 }
 
+async function fetchUCStations() {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("uc_stations")
+    .select("uc_id, station_id");
+  return data ?? [];
+}
+
 export default async function UnidadesPage({ searchParams }: Props) {
   const params = await searchParams;
-  const [unidades, empresas, solis, sungrow, opcoesTarifarias] = await Promise.all([
+  const [unidades, empresas, solis, sungrow, opcoesTarifarias, ucStationsRows] = await Promise.all([
     getUCs(params.search, params.empresa),
     getEmpresas(),
     fetchSolisUCs(),
     fetchSungrowUCs(),
     getOpcoesTarifarias(),
+    fetchUCStations(),
   ]);
 
   // Mapa station_id → info da UC vinculada (incluindo dados tarifários)
@@ -69,8 +77,28 @@ export default async function UnidadesPage({ searchParams }: Props) {
     modalidade_tarifaria_aneel?: string | null;
   }> = {};
 
+  // Mapa uc_id → UC para lookup rápido
+  const ucMap = new Map(unidades.map((uc) => [uc.id, uc]));
+
+  // Preencher via uc_stations
+  for (const link of ucStationsRows) {
+    const uc = ucMap.get(link.uc_id);
+    if (!uc) continue;
+    const emp = uc.empresa as { id: string; nome: string }[] | { id: string; nome: string } | null;
+    const nome = Array.isArray(emp) ? emp[0]?.nome ?? "" : emp?.nome ?? "";
+    vinculadas[link.station_id] = {
+      ucId: uc.id,
+      empresaNome: nome,
+      grupo_tarifario: (uc as Record<string, unknown>).grupo_tarifario as string | null,
+      subgrupo: (uc as Record<string, unknown>).subgrupo as string | null,
+      concessionaria_sigla: (uc as Record<string, unknown>).concessionaria_sigla as string | null,
+      modalidade_tarifaria_aneel: (uc as Record<string, unknown>).modalidade_tarifaria_aneel as string | null,
+    };
+  }
+
+  // Fallback: UCs com station_id legado que ainda não foram migradas para uc_stations
   for (const uc of unidades) {
-    if (uc.station_id) {
+    if (uc.station_id && !vinculadas[uc.station_id]) {
       const emp = uc.empresa as { id: string; nome: string }[] | { id: string; nome: string } | null;
       const nome = Array.isArray(emp) ? emp[0]?.nome ?? "" : emp?.nome ?? "";
       vinculadas[uc.station_id] = {

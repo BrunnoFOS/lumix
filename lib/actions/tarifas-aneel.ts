@@ -220,18 +220,19 @@ export interface TarifaLookupResult {
 export async function lookupTarifas(
   sigla: string,
   subgrupo: string,
-  modalidade: string | null
+  modalidade: string | null,
+  dataReferencia?: string
 ): Promise<TarifaLookupResult[]> {
   const supabase = await createServerClient();
-  const hoje = new Date().toISOString().split("T")[0];
+  const ref = dataReferencia || new Date().toISOString().split("T")[0];
 
   let query = supabase
     .from("tarifas_aneel")
     .select("posto, tusd, te, vigencia_inicio, vigencia_fim")
     .eq("sigla", sigla)
     .eq("subgrupo", subgrupo)
-    .lte("vigencia_inicio", hoje)
-    .or(`vigencia_fim.is.null,vigencia_fim.gte.${hoje}`)
+    .lte("vigencia_inicio", ref)
+    .or(`vigencia_fim.is.null,vigencia_fim.gte.${ref}`)
     .order("posto");
 
   if (modalidade) {
@@ -241,4 +242,55 @@ export async function lookupTarifas(
   const { data, error } = await query;
   if (error || !data) return [];
   return data;
+}
+
+/**
+ * Busca tarifas TUSD e TE para uma UC em um mês de referência.
+ * Retorna as tarifas formatadas por grupo tarifário:
+ * - Grupo B: tarifa única (posto "Não se aplica")
+ * - Grupo A: tarifas ponta e fora ponta
+ */
+export interface TarifasUC {
+  grupo: "grupo_a" | "grupo_b" | "acl";
+  // Grupo B (tarifa única)
+  tusd?: number;
+  te?: number;
+  // Grupo A (por posto)
+  tusd_ponta?: number;
+  te_ponta?: number;
+  tusd_fora_ponta?: number;
+  te_fora_ponta?: number;
+}
+
+export async function lookupTarifasUC(
+  sigla: string,
+  subgrupo: string,
+  modalidade: string | null,
+  grupoTarifario: string,
+  mesReferencia: string
+): Promise<TarifasUC | null> {
+  const tarifas = await lookupTarifas(sigla, subgrupo, modalidade, mesReferencia);
+  if (tarifas.length === 0) return null;
+
+  if (grupoTarifario === "grupo_b") {
+    // Grupo B: tarifa única, posto "Não se aplica" ou qualquer
+    const t = tarifas.find((t) => t.posto === "Não se aplica") ?? tarifas[0];
+    return {
+      grupo: "grupo_b",
+      tusd: t.tusd,
+      te: t.te,
+    };
+  }
+
+  // Grupo A ou ACL: tarifas por posto
+  const ponta = tarifas.find((t) => t.posto === "Ponta");
+  const foraPonta = tarifas.find((t) => t.posto === "Fora ponta");
+
+  return {
+    grupo: grupoTarifario as "grupo_a" | "acl",
+    tusd_ponta: ponta?.tusd,
+    te_ponta: ponta?.te,
+    tusd_fora_ponta: foraPonta?.tusd,
+    te_fora_ponta: foraPonta?.te,
+  };
 }

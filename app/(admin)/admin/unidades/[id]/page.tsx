@@ -5,6 +5,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UCClassificacaoTarifaria } from "@/components/admin/UCClassificacaoTarifaria";
+import { UCParametrosEstimativa } from "@/components/admin/UCParametrosEstimativa";
 import { getUC } from "@/lib/actions/unidades";
 import { getOpcoesTarifarias } from "@/lib/actions/tarifas-aneel";
 import { formatDate } from "@/lib/utils";
@@ -105,8 +106,18 @@ export default async function UCDetalhesPage({ params }: Props) {
           subgrupo: uc.subgrupo ?? null,
           concessionaria_sigla: uc.concessionaria_sigla ?? null,
           modalidade_tarifaria_aneel: uc.modalidade_tarifaria_aneel ?? null,
+          contrato_acl_rs_mwh: uc.contrato_acl_rs_mwh ?? null,
         }}
         opcoesTarifarias={opcoesTarifarias}
+      />
+
+      <UCParametrosEstimativa
+        ucId={id}
+        initial={{
+          fator_rendimento: uc.fator_rendimento ?? null,
+          degradacao_ano_zero: uc.degradacao_ano_zero ?? null,
+          degradacao_anos_seguintes: uc.degradacao_anos_seguintes ?? null,
+        }}
       />
 
       <Card>

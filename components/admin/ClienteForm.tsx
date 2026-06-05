@@ -208,17 +208,13 @@ export function ClienteForm({ empresa, grupos }: ClienteFormProps) {
 
             <div className="space-y-2">
               <Label htmlFor="estado">Estado</Label>
-              <select
+              <Combobox
                 name="estado"
+                options={ESTADOS}
                 value={estado}
-                onChange={(e) => { setEstado(e.target.value); setCidade(""); }}
-                className={selectClass}
-              >
-                <option value="">UF</option>
-                {ESTADOS.map((uf) => (
-                  <option key={uf} value={uf}>{uf}</option>
-                ))}
-              </select>
+                onChange={(v) => { setEstado(v); setCidade(""); }}
+                placeholder="UF"
+              />
             </div>
 
             <div className="space-y-2 sm:col-span-2">
@@ -229,17 +225,13 @@ export function ClienteForm({ empresa, grupos }: ClienteFormProps) {
             <div className="space-y-2">
               <Label htmlFor="cidade">Cidade</Label>
               {cidades.length > 0 ? (
-                <select
+                <Combobox
                   name="cidade"
+                  options={cidades.map((c) => c.nome)}
                   value={cidade}
-                  onChange={(e) => setCidade(e.target.value)}
-                  className={selectClass}
-                >
-                  <option value="">Selecione a cidade</option>
-                  {cidades.map((c) => (
-                    <option key={c.nome} value={c.nome}>{c.nome}</option>
-                  ))}
-                </select>
+                  onChange={setCidade}
+                  placeholder="Buscar cidade..."
+                />
               ) : (
                 <Input
                   id="cidade"

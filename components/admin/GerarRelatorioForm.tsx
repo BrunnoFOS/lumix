@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import { Upload, X, FileText, FileImage, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Combobox } from "@/components/ui/combobox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { criarRelatorioComAnexo } from "@/lib/actions/relatorios";
@@ -35,6 +36,19 @@ export function GerarRelatorioForm({
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ucId, setUcId] = useState("");
+
+  const ucOptions = useMemo(
+    () =>
+      ucs.map((uc) => ({
+        value: uc.id,
+        label:
+          uc.source === "solis"
+            ? `${uc.station_name}`
+            : `${uc.codigo_uc} — ${uc.empresa?.nome ?? ""}`,
+      })),
+    [ucs]
+  );
 
   const validateFile = useCallback((f: File): string | null => {
     if (!ACCEPTED_TYPES.includes(f.type)) {
@@ -177,18 +191,13 @@ export function GerarRelatorioForm({
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="uc_id">Unidade consumidora *</Label>
-              <select
+              <Combobox
                 name="uc_id"
-                className="flex h-8 w-full items-center rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                required
-              >
-                <option value="">Selecione a UC</option>
-                {ucs.map((uc) => (
-                  <option key={uc.id} value={uc.id}>
-                    {uc.source === "solis" ? `⚡ ${uc.station_name}` : `${uc.codigo_uc} — ${uc.empresa?.nome}`}
-                  </option>
-                ))}
-              </select>
+                options={ucOptions}
+                value={ucId}
+                onChange={setUcId}
+                placeholder="Buscar UC ou usina..."
+              />
             </div>
 
             <div className="space-y-2">

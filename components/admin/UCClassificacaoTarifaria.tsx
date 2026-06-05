@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Zap, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +33,7 @@ interface Props {
     subgrupo: string | null;
     concessionaria_sigla: string | null;
     modalidade_tarifaria_aneel: string | null;
+    contrato_acl_rs_mwh: number | null;
   };
   opcoesTarifarias: TarifaOpcoes;
 }
@@ -43,6 +45,7 @@ export function UCClassificacaoTarifaria({ ucId, initial, opcoesTarifarias }: Pr
   const [subgrupo, setSubgrupo] = useState(initial.subgrupo ?? "");
   const [concessionaria, setConcessionaria] = useState(initial.concessionaria_sigla ?? "");
   const [modalidade, setModalidade] = useState(initial.modalidade_tarifaria_aneel ?? "");
+  const [contratoAcl, setContratoAcl] = useState(initial.contrato_acl_rs_mwh?.toString() ?? "");
 
   const [opcoes, setOpcoes] = useState<TarifaOpcoes>(opcoesTarifarias);
   const [tarifas, setTarifas] = useState<TarifaLookupResult[]>([]);
@@ -112,6 +115,7 @@ export function UCClassificacaoTarifaria({ ucId, initial, opcoesTarifarias }: Pr
       subgrupo: subgrupo || null,
       concessionaria_sigla: concessionaria || null,
       modalidade_tarifaria_aneel: modalidade || null,
+      contrato_acl_rs_mwh: contratoAcl ? parseFloat(contratoAcl) : null,
     });
     setSaving(false);
 
@@ -126,7 +130,8 @@ export function UCClassificacaoTarifaria({ ucId, initial, opcoesTarifarias }: Pr
     grupo !== (initial.grupo_tarifario ?? "") ||
     subgrupo !== (initial.subgrupo ?? "") ||
     concessionaria !== (initial.concessionaria_sigla ?? "") ||
-    modalidade !== (initial.modalidade_tarifaria_aneel ?? "");
+    modalidade !== (initial.modalidade_tarifaria_aneel ?? "") ||
+    contratoAcl !== (initial.contrato_acl_rs_mwh?.toString() ?? "");
 
   return (
     <Card className="overflow-visible">
@@ -156,16 +161,12 @@ export function UCClassificacaoTarifaria({ ucId, initial, opcoesTarifarias }: Pr
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Grupo tarifário</Label>
-            <select
+            <Combobox
+              options={GRUPOS.map((g) => ({ value: g.value, label: g.label }))}
               value={grupo}
-              onChange={(e) => handleGrupoChange(e.target.value)}
-              className={selectClass}
-            >
-              <option value="">Selecione</option>
-              {GRUPOS.map((g) => (
-                <option key={g.value} value={g.value}>{g.label}</option>
-              ))}
-            </select>
+              onChange={handleGrupoChange}
+              placeholder="Selecione"
+            />
           </div>
 
           <div className="space-y-2">
@@ -203,6 +204,25 @@ export function UCClassificacaoTarifaria({ ucId, initial, opcoesTarifarias }: Pr
             />
           </div>
         </div>
+
+        {/* Contrato ACL */}
+        {isAcl && (
+          <div className="space-y-2">
+            <Label htmlFor="contrato_acl">Contrato ACL (R$/MWh)</Label>
+            <Input
+              id="contrato_acl"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="Ex: 280.00"
+              value={contratoAcl}
+              onChange={(e) => { setContratoAcl(e.target.value); setSaved(false); }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Preço negociado do contrato de energia no mercado livre. Será convertido para R$/kWh (÷1000) nos cálculos.
+            </p>
+          </div>
+        )}
 
         {/* Preview de tarifas */}
         {grupo && !isAcl && concessionaria && subgrupo && (

@@ -100,7 +100,55 @@ describe("getResumoGeracaoCliente", () => {
     expect(result.economia_total).toBe(2000);
   });
 
-  it("deve classificar performance como bom quando ratio >= 80", async () => {
+  it("deve classificar performance como bom quando ratio >= 98", async () => {
+    // Mock com performance_ratio 99 e 98 (média 98.5)
+    mockSupabaseData.geracoes = [
+      {
+        uc_id: "uc-1",
+        geracao_kwh: 9900,
+        geracao_estimada_kwh: 10000,
+        performance_ratio: 99,
+        indice_performance: "bom",
+      },
+      {
+        uc_id: "uc-2",
+        geracao_kwh: 7840,
+        geracao_estimada_kwh: 8000,
+        performance_ratio: 98,
+        indice_performance: "bom",
+      },
+    ];
+
+    const result = await getResumoGeracaoCliente("empresa-1", "2026-04-01");
+    expect(result.performance).toBe("bom");
+    expect(result.performance_ratio).toBe(98.5);
+  });
+
+  it("deve classificar performance como regular quando 90 <= ratio < 98", async () => {
+    // Mock com performance_ratio 95 e 93 (média 94)
+    mockSupabaseData.geracoes = [
+      {
+        uc_id: "uc-1",
+        geracao_kwh: 9500,
+        geracao_estimada_kwh: 10000,
+        performance_ratio: 95,
+        indice_performance: "regular",
+      },
+      {
+        uc_id: "uc-2",
+        geracao_kwh: 7440,
+        geracao_estimada_kwh: 8000,
+        performance_ratio: 93,
+        indice_performance: "regular",
+      },
+    ];
+
+    const result = await getResumoGeracaoCliente("empresa-1", "2026-04-01");
+    expect(result.performance).toBe("regular");
+    expect(result.performance_ratio).toBe(94);
+  });
+
+  it("deve classificar performance como ruim quando ratio < 90", async () => {
     // Mock com performance_ratio 85 e 80 (média 82.5)
     mockSupabaseData.geracoes = [
       {
@@ -108,68 +156,20 @@ describe("getResumoGeracaoCliente", () => {
         geracao_kwh: 8500,
         geracao_estimada_kwh: 10000,
         performance_ratio: 85,
-        indice_performance: "bom",
+        indice_performance: "ruim",
       },
       {
         uc_id: "uc-2",
         geracao_kwh: 6400,
         geracao_estimada_kwh: 8000,
         performance_ratio: 80,
-        indice_performance: "bom",
-      },
-    ];
-
-    const result = await getResumoGeracaoCliente("empresa-1", "2026-04-01");
-    expect(result.performance).toBe("bom");
-    expect(result.performance_ratio).toBe(82.5);
-  });
-
-  it("deve classificar performance como regular quando 60 <= ratio < 80", async () => {
-    // Mock com performance_ratio 70 e 65 (média 67.5)
-    mockSupabaseData.geracoes = [
-      {
-        uc_id: "uc-1",
-        geracao_kwh: 7000,
-        geracao_estimada_kwh: 10000,
-        performance_ratio: 70,
-        indice_performance: "regular",
-      },
-      {
-        uc_id: "uc-2",
-        geracao_kwh: 5200,
-        geracao_estimada_kwh: 8000,
-        performance_ratio: 65,
-        indice_performance: "regular",
-      },
-    ];
-
-    const result = await getResumoGeracaoCliente("empresa-1", "2026-04-01");
-    expect(result.performance).toBe("regular");
-    expect(result.performance_ratio).toBe(67.5);
-  });
-
-  it("deve classificar performance como ruim quando ratio < 60", async () => {
-    // Mock com performance_ratio 50 e 40 (média 45)
-    mockSupabaseData.geracoes = [
-      {
-        uc_id: "uc-1",
-        geracao_kwh: 5000,
-        geracao_estimada_kwh: 10000,
-        performance_ratio: 50,
-        indice_performance: "ruim",
-      },
-      {
-        uc_id: "uc-2",
-        geracao_kwh: 3200,
-        geracao_estimada_kwh: 8000,
-        performance_ratio: 40,
         indice_performance: "ruim",
       },
     ];
 
     const result = await getResumoGeracaoCliente("empresa-1", "2026-04-01");
     expect(result.performance).toBe("ruim");
-    expect(result.performance_ratio).toBe(45);
+    expect(result.performance_ratio).toBe(82.5);
   });
 
   it("deve retornar performance null quando não há dados de performance_ratio", async () => {

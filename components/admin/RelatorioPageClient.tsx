@@ -25,6 +25,7 @@ interface RelatorioRow {
   indice_performance: string | null;
   status_envio: string;
   gerado_por: string;
+  tipo_relatorio: string;
   pdf_url: string | null;
   uc: { id: string; codigo_uc: string } | null;
   empresa: { id: string; nome: string } | null;
