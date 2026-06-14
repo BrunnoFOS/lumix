@@ -6,12 +6,10 @@ import { useState } from "react";
 import {
   LayoutDashboard,
   Building2,
-  Users,
   Zap,
   FileText,
   FileSearch,
   Receipt,
-  Percent,
   DollarSign,
   Bell,
   LogOut,
@@ -28,17 +26,16 @@ import {
 } from "@/components/ui/sheet";
 import { logout } from "@/lib/actions/auth";
 import { useAlertas } from "@/hooks/use-alertas";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 
 const navItems = [
   { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
   { label: "Clientes", href: "/admin/clientes", icon: Building2 },
-  { label: "Grupos", href: "/admin/grupos", icon: Users },
   { label: "Unidades", href: "/admin/unidades", icon: Zap },
   { label: "Relatórios", href: "/admin/relatorios", icon: FileText },
   { label: "Faturas", href: "/admin/faturas", icon: Receipt },
   { label: "Rel. Fatura", href: "/admin/faturas-processadas", icon: FileSearch },
   { label: "Tarifas", href: "/admin/tarifas", icon: DollarSign },
-  { label: "Impostos", href: "/admin/impostos", icon: Percent },
   { label: "Alertas", href: "/admin/alertas", icon: Bell },
 ];
 
@@ -153,6 +150,9 @@ export function AdminSidebar() {
         <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
           Admin
         </span>
+        <div className="ml-auto">
+          <NotificationBell />
+        </div>
       </div>
     </>
   );

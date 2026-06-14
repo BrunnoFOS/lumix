@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Radio, Link2, Loader2, CheckCircle, MapPin, Cpu, Search, LinkIcon } from "lucide-react";
+import { Radio, Link2, Loader2, CheckCircle, MapPin, Cpu, Search, LinkIcon, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Combobox } from "@/components/ui/combobox";
 import { ProviderFilterTabs, type ProviderFilter } from "@/components/shared/ProviderFilter";
-import { vincularSolisUC, vincularStationAUC } from "@/lib/actions/unidades";
+import { vincularSolisUC, vincularStationAUC, buscarUCSimilar, type UCSimilar } from "@/lib/actions/unidades";
 import type { UsinaUC } from "@/lib/actions/solis";
 
 interface UsinaComProvider extends UsinaUC {
@@ -60,11 +60,17 @@ export function VincularSolisUC({
   // UCs locais (inclui recém-criadas antes do refresh do server)
   const [localUcs, setLocalUcs] = useState<UCExistente[]>(ucsExistentes);
 
-  // Dialog para vincular a UC existente
+  // Dialog para vincular a UC existente (manual)
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedStation, setSelectedStation] = useState<UsinaComProvider | null>(null);
   const [selectedUcId, setSelectedUcId] = useState("");
   const [vinculandoExistente, setVinculandoExistente] = useState(false);
+
+  // Dialog de confirmação de similaridade
+  const [similarDialogOpen, setSimilarDialogOpen] = useState(false);
+  const [similarStation, setSimilarStation] = useState<UsinaComProvider | null>(null);
+  const [similares, setSimilares] = useState<UCSimilar[]>([]);
+  const [buscandoSimilar, setBuscandoSimilar] = useState(false);
 
   const filtradas = useMemo(() => {
     let list = usinas;
@@ -79,6 +85,28 @@ export function VincularSolisUC({
   }, [usinas, provider, search]);
 
   async function handleVincular(uc: UsinaComProvider) {
+    setVinculando(uc.station_id);
+    setError(null);
+
+    // Buscar UCs similares via trigramas
+    setBuscandoSimilar(true);
+    const ucsSimilares = await buscarUCSimilar(empresaId, uc.station_name);
+    setBuscandoSimilar(false);
+
+    if (ucsSimilares.length > 0) {
+      // Encontrou UCs similares — mostrar confirmação ao admin
+      setSimilarStation(uc);
+      setSimilares(ucsSimilares);
+      setSimilarDialogOpen(true);
+      setVinculando(null);
+      return;
+    }
+
+    // Sem match — criar UC nova diretamente
+    await criarNovaUC(uc);
+  }
+
+  async function criarNovaUC(uc: UsinaComProvider) {
     setVinculando(uc.station_id);
     setError(null);
 
@@ -97,13 +125,49 @@ export function VincularSolisUC({
       setError(result.error);
     } else {
       setVinculados((prev) => new Set(prev).add(uc.station_id));
-      // Adicionar UC recém-criada à lista local para permitir vincular outra usina à mesma UC
       if (result.data?.id) {
         setLocalUcs((prev) => [...prev, { id: result.data!.id, codigo_uc: uc.station_name }]);
       }
       router.refresh();
     }
     setVinculando(null);
+  }
+
+  async function handleConfirmarSimilar(ucId: string) {
+    if (!similarStation) return;
+    setVinculandoExistente(true);
+    setError(null);
+
+    // Detectar provider
+    const result = await vincularStationAUC(
+      ucId,
+      similarStation.station_id,
+      similarStation.provider,
+      {
+        potencia_kwp: similarStation.potencia_instalada_kwp,
+        qtd_inversores: similarStation.qtd_inversores,
+      }
+    );
+
+    if (result.error) {
+      setError(result.error);
+    } else {
+      setVinculados((prev) => new Set(prev).add(similarStation.station_id));
+      router.refresh();
+    }
+    setVinculandoExistente(false);
+    setSimilarDialogOpen(false);
+    setSimilarStation(null);
+    setSimilares([]);
+  }
+
+  async function handleRejeitarSimilar() {
+    if (!similarStation) return;
+    setSimilarDialogOpen(false);
+    // Criar UC nova, ignorando as sugestões
+    await criarNovaUC(similarStation);
+    setSimilarStation(null);
+    setSimilares([]);
   }
 
   function handleOpenVincularExistente(uc: UsinaComProvider) {
@@ -120,7 +184,11 @@ export function VincularSolisUC({
     const result = await vincularStationAUC(
       selectedUcId,
       selectedStation.station_id,
-      selectedStation.provider
+      selectedStation.provider,
+      {
+        potencia_kwp: selectedStation.potencia_instalada_kwp,
+        qtd_inversores: selectedStation.qtd_inversores,
+      }
     );
 
     if (result.error) {
@@ -190,6 +258,7 @@ export function VincularSolisUC({
             <TableBody>
               {filtradas.map((uc) => {
                 const jaVinculado = vinculados.has(uc.station_id);
+                const loading = vinculando === uc.station_id;
 
                 return (
                   <TableRow key={uc.station_id}>
@@ -226,10 +295,10 @@ export function VincularSolisUC({
                             size="sm"
                             variant="outline"
                             onClick={() => handleVincular(uc)}
-                            disabled={vinculando === uc.station_id}
+                            disabled={loading}
                             title="Criar nova UC e vincular"
                           >
-                            {vinculando === uc.station_id ? (
+                            {loading ? (
                               <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
                             ) : (
                               <Link2 className="mr-1 h-3.5 w-3.5" />
@@ -258,14 +327,84 @@ export function VincularSolisUC({
         </div>
       )}
 
-      {/* Dialog para vincular a UC existente */}
+      {/* Dialog de confirmação de similaridade */}
+      <Dialog open={similarDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setSimilarDialogOpen(false);
+          setSimilarStation(null);
+          setSimilares([]);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              UC similar encontrada
+            </DialogTitle>
+            <DialogDescription>
+              A usina <strong>{similarStation?.station_name}</strong> ({similarStation?.provider === "solis" ? "Solis" : "SunGrow"}) tem nome similar a UCs já cadastradas deste cliente. Deseja vincular a uma delas ou criar uma UC nova?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <div className="space-y-2">
+              {similares.map((s) => (
+                <button
+                  key={s.uc_id}
+                  onClick={() => handleConfirmarSimilar(s.uc_id)}
+                  disabled={vinculandoExistente}
+                  className="flex w-full items-center justify-between rounded-lg border border-border p-3 text-left transition-colors hover:border-primary hover:bg-orange-50/50 disabled:opacity-50"
+                >
+                  <div>
+                    <p className="text-sm font-medium">{s.codigo_uc}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Vincular a esta UC (potência e inversores serão somados)
+                    </p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={
+                      s.score >= 0.6
+                        ? "border-green-200 bg-green-50 text-green-700"
+                        : "border-amber-200 bg-amber-50 text-amber-700"
+                    }
+                  >
+                    {Math.round(s.score * 100)}%
+                  </Badge>
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-between border-t border-border pt-3">
+              <Button
+                variant="outline"
+                onClick={() => { setSimilarDialogOpen(false); setSimilarStation(null); setSimilares([]); }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="default"
+                onClick={handleRejeitarSimilar}
+                disabled={vinculando !== null}
+              >
+                {vinculando ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Link2 className="mr-2 h-4 w-4" />
+                )}
+                Criar UC nova mesmo assim
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para vincular a UC existente (manual) */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Vincular a UC existente</DialogTitle>
             <DialogDescription>
               Vincular <strong>{selectedStation?.station_name}</strong> ({selectedStation?.provider === "solis" ? "Solis" : "SunGrow"}) a uma UC já cadastrada deste cliente.
-              Isso é útil quando a mesma usina física tem inversores de provedores diferentes.
+              Potência e inversores serão somados à UC selecionada.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">

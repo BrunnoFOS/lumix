@@ -1,9 +1,6 @@
 import { ClienteForm } from "@/components/admin/ClienteForm";
-import { getGruposSimples } from "@/lib/actions/grupos";
 
 export default async function NovoClientePage() {
-  const grupos = await getGruposSimples();
-
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
@@ -12,7 +9,7 @@ export default async function NovoClientePage() {
           Cadastre um novo cliente.
         </p>
       </div>
-      <ClienteForm grupos={grupos} />
+      <ClienteForm />
     </div>
   );
 }

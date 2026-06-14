@@ -24,7 +24,6 @@ const selectClass =
 
 interface ClienteFormProps {
   empresa?: Empresa;
-  grupos: { id: string; nome: string }[];
 }
 
 interface FormState {
@@ -32,12 +31,10 @@ interface FormState {
   data?: { id: string };
 }
 
-export function ClienteForm({ empresa, grupos }: ClienteFormProps) {
+export function ClienteForm({ empresa }: ClienteFormProps) {
   const router = useRouter();
   const isEditing = !!empresa;
   const formRef = useRef<HTMLFormElement>(null);
-
-  const empresaAny = empresa as Record<string, unknown> | undefined;
 
   const [nome, setNome] = useState(empresa?.nome ?? "");
   const [endereco, setEndereco] = useState(empresa?.endereco ?? "");
@@ -46,9 +43,6 @@ export function ClienteForm({ empresa, grupos }: ClienteFormProps) {
   const [cep, setCep] = useState(empresa?.cep ?? "");
   const [telefone, setTelefone] = useState(empresa?.telefone ?? "");
   const [email, setEmail] = useState(empresa?.email ?? "");
-  const [grupoId, setGrupoId] = useState((empresaAny?.grupo_id as string) ?? "");
-
-  const grupoNome = grupos.find((g) => g.id === grupoId)?.nome ?? "";
 
   const cnpjLookup = useCNPJLookup();
   const cepLookup = useCEPLookup();
@@ -137,20 +131,6 @@ export function ClienteForm({ empresa, grupos }: ClienteFormProps) {
                   Preencha o CNPJ para buscar dados automaticamente
                 </p>
               )}
-            </div>
-
-            <div className="space-y-2">
-              <Label>Grupo empresarial</Label>
-              <input type="hidden" name="grupo_id" value={grupoId} />
-              <Combobox
-                options={grupos.map((g) => g.nome)}
-                value={grupoNome}
-                onChange={(nome) => {
-                  const found = grupos.find((g) => g.nome === nome);
-                  setGrupoId(found?.id ?? "");
-                }}
-                placeholder="Nenhum grupo (opcional)"
-              />
             </div>
 
             <div className="space-y-2 sm:col-span-2">

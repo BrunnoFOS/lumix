@@ -3,7 +3,6 @@ import { ArrowLeft } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
 import { ClienteForm } from "@/components/admin/ClienteForm";
 import { getEmpresa } from "@/lib/actions/empresas";
-import { getGruposSimples } from "@/lib/actions/grupos";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -11,10 +10,7 @@ interface Props {
 
 export default async function EditarClientePage({ params }: Props) {
   const { id } = await params;
-  const [empresa, grupos] = await Promise.all([
-    getEmpresa(id),
-    getGruposSimples(),
-  ]);
+  const empresa = await getEmpresa(id);
 
   if (!empresa) notFound();
 
@@ -29,7 +25,7 @@ export default async function EditarClientePage({ params }: Props) {
           <p className="mt-1 text-sm text-muted-foreground">{empresa.nome}</p>
         </div>
       </div>
-      <ClienteForm empresa={empresa} grupos={grupos} />
+      <ClienteForm empresa={empresa} />
     </div>
   );
 }

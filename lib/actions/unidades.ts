@@ -200,6 +200,9 @@ export async function updateClassificacaoTarifaria(
     concessionaria_sigla: string | null;
     modalidade_tarifaria_aneel: string | null;
     contrato_acl_rs_mwh?: number | null;
+    icms_aliquota?: number | null;
+    pis_aliquota?: number | null;
+    cofins_aliquota?: number | null;
   }
 ): Promise<ActionResult> {
   const supabase = await createServerClient();
@@ -245,9 +248,16 @@ export async function updateParametrosEstimativa(
 export async function desvincularUC(id: string): Promise<ActionResult> {
   const supabase = await createServerClient();
 
+  // Remover vínculos de stations (uc_stations) antes
+  await supabase
+    .from("uc_stations")
+    .delete()
+    .eq("uc_id", id);
+
+  // Limpar station_id legado e arquivar a UC (soft delete)
   const { error } = await supabase
     .from("unidades_consumidoras")
-    .delete()
+    .update({ station_id: null, arquivada: true, ativa: false })
     .eq("id", id);
 
   if (error) {
@@ -392,15 +402,38 @@ interface SolisUCData {
   cidade_uf: string | null;
 }
 
-// Normaliza nome para comparação (remove acentos, lowercase, trim)
-function normalizeName(name: string): string {
-  return name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
+// ——— Busca fuzzy de UCs similares via trigramas (pg_trgm) ———
+
+export interface UCSimilar {
+  uc_id: string;
+  codigo_uc: string;
+  score: number;
 }
 
+/**
+ * Busca UCs da empresa com nome similar ao station_name usando pg_trgm.
+ * Threshold: 0.3 (30% de similaridade mínima).
+ */
+export async function buscarUCSimilar(
+  empresaId: string,
+  stationName: string
+): Promise<UCSimilar[]> {
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase.rpc("buscar_uc_similar", {
+    p_empresa_id: empresaId,
+    p_nome: stationName,
+    p_threshold: 0.3,
+  });
+
+  if (error || !data) return [];
+  return data as UCSimilar[];
+}
+
+/**
+ * Cria uma nova UC a partir de dados de uma station (Solis/SunGrow)
+ * e vincula na tabela uc_stations. Não faz matching automático.
+ */
 export async function vincularSolisUC(
   empresaId: string,
   solisData: SolisUCData
@@ -427,55 +460,7 @@ export async function vincularSolisUC(
 
   const provider = cacheRow?.provider ?? "solis";
 
-  // Verificar se já existe uma UC do mesmo cliente com nome similar
-  // (caso de usina com inversores de provedores diferentes)
-  const { data: ucsEmpresa } = await supabase
-    .from("unidades_consumidoras")
-    .select("id, codigo_uc")
-    .eq("empresa_id", empresaId)
-    .eq("ativa", true);
-
-  const nomeNormalizado = normalizeName(solisData.station_name);
-  const ucExistente = ucsEmpresa?.find(
-    (uc) => normalizeName(uc.codigo_uc) === nomeNormalizado
-  );
-
-  if (ucExistente) {
-    // UC com mesmo nome já existe — vincular station a ela (multi-provedor)
-    const { error: linkError } = await supabase.from("uc_stations").insert({
-      uc_id: ucExistente.id,
-      station_id: solisData.station_id,
-      provider,
-    });
-
-    if (linkError) {
-      return { error: "Erro ao vincular usina à UC existente." };
-    }
-
-    // Somar potência e inversores na UC existente
-    const { data: ucAtual } = await supabase
-      .from("unidades_consumidoras")
-      .select("potencia_instalada_kwp, quantidade_inversores")
-      .eq("id", ucExistente.id)
-      .single();
-
-    if (ucAtual) {
-      await supabase
-        .from("unidades_consumidoras")
-        .update({
-          potencia_instalada_kwp: (ucAtual.potencia_instalada_kwp ?? 0) + solisData.potencia_instalada_kwp,
-          quantidade_inversores: (ucAtual.quantidade_inversores ?? 0) + solisData.qtd_inversores,
-        })
-        .eq("id", ucExistente.id);
-    }
-
-    revalidatePath("/admin/clientes");
-    revalidatePath(`/admin/clientes/${empresaId}`);
-    revalidatePath("/admin/unidades");
-    return { data: { id: ucExistente.id } };
-  }
-
-  // Nenhuma UC similar — criar nova
+  // Criar nova UC
   let cidade: string | null = null;
   let estado: string | null = null;
   if (solisData.cidade_uf) {
@@ -525,10 +510,12 @@ export async function vincularSolisUC(
 }
 
 // Vincular um station_id adicional a uma UC já existente (multi-provedor)
+// Opcionalmente soma potência e inversores da station na UC
 export async function vincularStationAUC(
   ucId: string,
   stationId: string,
-  provider: "solis" | "sungrow"
+  provider: "solis" | "sungrow",
+  stationData?: { potencia_kwp: number; qtd_inversores: number }
 ): Promise<ActionResult> {
   const supabase = await createServerClient();
 
@@ -551,6 +538,25 @@ export async function vincularStationAUC(
 
   if (error) {
     return { error: "Erro ao vincular usina adicional." };
+  }
+
+  // Somar potência e inversores na UC existente
+  if (stationData) {
+    const { data: ucAtual } = await supabase
+      .from("unidades_consumidoras")
+      .select("potencia_instalada_kwp, quantidade_inversores")
+      .eq("id", ucId)
+      .single();
+
+    if (ucAtual) {
+      await supabase
+        .from("unidades_consumidoras")
+        .update({
+          potencia_instalada_kwp: (ucAtual.potencia_instalada_kwp ?? 0) + stationData.potencia_kwp,
+          quantidade_inversores: (ucAtual.quantidade_inversores ?? 0) + stationData.qtd_inversores,
+        })
+        .eq("id", ucId);
+    }
   }
 
   revalidatePath("/admin/unidades");

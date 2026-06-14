@@ -60,7 +60,10 @@
       "Bash(read dir:*)",
       "Bash([ -f \"$dir/page.tsx\" ])",
       "Bash([ -f \"$dir/loading.tsx\" ])",
-      "Bash(xargs ls:*)"
+      "Bash(xargs ls:*)",
+      "Bash(xargs wc:*)",
+      "Bash(find:*)",
+      "mcp__supabase-lumix__get_logs"
     ]
   }
 }

@@ -21,8 +21,6 @@ export async function createEmpresa(formData: FormData): Promise<ActionResult> {
   const telefone = (formData.get("telefone") as string) || null;
   const email = (formData.get("email") as string) || null;
   const responsavel = (formData.get("responsavel") as string) || null;
-  const grupo_id = (formData.get("grupo_id") as string) || null;
-
   if (!nome || !cnpj) {
     return { error: "Nome e CNPJ são obrigatórios." };
   }
@@ -43,7 +41,6 @@ export async function createEmpresa(formData: FormData): Promise<ActionResult> {
       telefone,
       email,
       responsavel,
-      grupo_id,
     })
     .select("id")
     .single();
@@ -74,8 +71,6 @@ export async function updateEmpresa(
   const telefone = (formData.get("telefone") as string) || null;
   const email = (formData.get("email") as string) || null;
   const responsavel = (formData.get("responsavel") as string) || null;
-  const grupo_id = (formData.get("grupo_id") as string) || null;
-
   if (!nome || !cnpj) {
     return { error: "Nome e CNPJ são obrigatórios." };
   }
@@ -96,7 +91,6 @@ export async function updateEmpresa(
       telefone,
       email,
       responsavel,
-      grupo_id,
     })
     .eq("id", id);
 
@@ -155,7 +149,7 @@ export async function getEmpresas(search?: string, status?: string) {
 
   let query = supabase
     .from("empresas")
-    .select("id, nome, cnpj, cidade, estado, ativa, arquivada, grupo_id")
+    .select("id, nome, cnpj, cidade, estado, ativa, arquivada")
     .order("nome");
 
   if (status === "ativas") {
@@ -209,21 +203,8 @@ export async function getEmpresaComRelacionamentos(id: string) {
     .eq("ativa", true)
     .order("codigo_uc");
 
-  // Buscar empresas do mesmo grupo
-  let grupoEmpresas: { id: string; nome: string; cnpj: string; ativa: boolean }[] = [];
-  if (empresa.grupo_id) {
-    const { data } = await supabase
-      .from("empresas")
-      .select("id, nome, cnpj, ativa")
-      .eq("grupo_id", empresa.grupo_id)
-      .neq("id", id)
-      .order("nome");
-    grupoEmpresas = data ?? [];
-  }
-
   return {
     ...empresa,
     ucs: ucs ?? [],
-    grupoEmpresas,
   };
 }

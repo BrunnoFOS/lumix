@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Zap, Plus, X, Unlink, Loader2 } from "lucide-react";
+import { Zap, Plus, X, Unlink, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { VincularSolisUC } from "@/components/admin/VincularSolisUC";
 import { desvincularUC } from "@/lib/actions/unidades";
 import type { UsinaUC } from "@/lib/actions/solis";
@@ -44,10 +54,13 @@ export function ClienteUCSection({
   const router = useRouter();
   const [showVincular, setShowVincular] = useState(false);
   const [desvinculando, setDesvinculando] = useState<string | null>(null);
+  const [ucParaDesvincular, setUcParaDesvincular] = useState<UC | null>(null);
 
-  async function handleDesvincular(ucId: string) {
-    setDesvinculando(ucId);
-    await desvincularUC(ucId);
+  async function handleConfirmarDesvincular() {
+    if (!ucParaDesvincular) return;
+    setDesvinculando(ucParaDesvincular.id);
+    setUcParaDesvincular(null);
+    await desvincularUC(ucParaDesvincular.id);
     setDesvinculando(null);
     router.refresh();
   }
@@ -122,10 +135,10 @@ export function ClienteUCSection({
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-8 w-8 text-red-500 hover:text-red-600"
-                      onClick={() => handleDesvincular(uc.id)}
+                      className="h-8 w-8 text-red-500 hover:bg-red-50 hover:text-red-600"
+                      onClick={() => setUcParaDesvincular(uc)}
                       disabled={desvinculando === uc.id}
-                      title="Desvincular UC"
+                      title="Desvincular UC deste cliente"
                     >
                       {desvinculando === uc.id ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -140,6 +153,41 @@ export function ClienteUCSection({
           </Table>
         ) : null}
       </CardContent>
+
+      <AlertDialog
+        open={!!ucParaDesvincular}
+        onOpenChange={(open) => { if (!open) setUcParaDesvincular(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-500" />
+              Desvincular UC
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">
+                Tem certeza que deseja desvincular a UC{" "}
+                <strong className="text-foreground">{ucParaDesvincular?.codigo_uc}</strong>{" "}
+                deste cliente?
+              </span>
+              <span className="block text-xs">
+                A UC será arquivada e os vínculos com usinas de monitoramento serão removidos.
+                Você poderá restaurá-la depois na página de unidades.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmarDesvincular}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              <Unlink className="mr-2 h-4 w-4" />
+              Desvincular
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

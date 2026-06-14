@@ -34,6 +34,9 @@ interface Props {
     concessionaria_sigla: string | null;
     modalidade_tarifaria_aneel: string | null;
     contrato_acl_rs_mwh: number | null;
+    icms_aliquota: number | null;
+    pis_aliquota: number | null;
+    cofins_aliquota: number | null;
   };
   opcoesTarifarias: TarifaOpcoes;
 }
@@ -46,6 +49,9 @@ export function UCClassificacaoTarifaria({ ucId, initial, opcoesTarifarias }: Pr
   const [concessionaria, setConcessionaria] = useState(initial.concessionaria_sigla ?? "");
   const [modalidade, setModalidade] = useState(initial.modalidade_tarifaria_aneel ?? "");
   const [contratoAcl, setContratoAcl] = useState(initial.contrato_acl_rs_mwh?.toString() ?? "");
+  const [icms, setIcms] = useState(initial.icms_aliquota != null ? (initial.icms_aliquota * 100).toFixed(2) : "");
+  const [pis, setPis] = useState(initial.pis_aliquota != null ? (initial.pis_aliquota * 100).toFixed(2) : "");
+  const [cofins, setCofins] = useState(initial.cofins_aliquota != null ? (initial.cofins_aliquota * 100).toFixed(2) : "");
 
   const [opcoes, setOpcoes] = useState<TarifaOpcoes>(opcoesTarifarias);
   const [tarifas, setTarifas] = useState<TarifaLookupResult[]>([]);
@@ -116,6 +122,9 @@ export function UCClassificacaoTarifaria({ ucId, initial, opcoesTarifarias }: Pr
       concessionaria_sigla: concessionaria || null,
       modalidade_tarifaria_aneel: modalidade || null,
       contrato_acl_rs_mwh: contratoAcl ? parseFloat(contratoAcl) : null,
+      icms_aliquota: icms ? parseFloat(icms) / 100 : null,
+      pis_aliquota: pis ? parseFloat(pis) / 100 : null,
+      cofins_aliquota: cofins ? parseFloat(cofins) / 100 : null,
     });
     setSaving(false);
 
@@ -131,7 +140,10 @@ export function UCClassificacaoTarifaria({ ucId, initial, opcoesTarifarias }: Pr
     subgrupo !== (initial.subgrupo ?? "") ||
     concessionaria !== (initial.concessionaria_sigla ?? "") ||
     modalidade !== (initial.modalidade_tarifaria_aneel ?? "") ||
-    contratoAcl !== (initial.contrato_acl_rs_mwh?.toString() ?? "");
+    contratoAcl !== (initial.contrato_acl_rs_mwh?.toString() ?? "") ||
+    icms !== (initial.icms_aliquota != null ? (initial.icms_aliquota * 100).toFixed(2) : "") ||
+    pis !== (initial.pis_aliquota != null ? (initial.pis_aliquota * 100).toFixed(2) : "") ||
+    cofins !== (initial.cofins_aliquota != null ? (initial.cofins_aliquota * 100).toFixed(2) : "");
 
   return (
     <Card className="overflow-visible">
@@ -221,6 +233,58 @@ export function UCClassificacaoTarifaria({ ucId, initial, opcoesTarifarias }: Pr
             <p className="text-xs text-muted-foreground">
               Preço negociado do contrato de energia no mercado livre. Será convertido para R$/kWh (÷1000) nos cálculos.
             </p>
+          </div>
+        )}
+
+        {/* Impostos */}
+        {grupo && (
+          <div className="space-y-3">
+            <Label className="text-sm font-medium">Impostos (%)</Label>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">ICMS</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  placeholder="Ex: 18.00"
+                  value={icms}
+                  onChange={(e) => { setIcms(e.target.value); setSaved(false); }}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">PIS</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  placeholder="Ex: 1.65"
+                  value={pis}
+                  onChange={(e) => { setPis(e.target.value); setSaved(false); }}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">COFINS</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  placeholder="Ex: 7.60"
+                  value={cofins}
+                  onChange={(e) => { setCofins(e.target.value); setSaved(false); }}
+                />
+              </div>
+            </div>
+            {icms && pis && cofins && (
+              <p className="text-xs text-muted-foreground">
+                Fator gross-up: <span className="font-mono font-medium text-foreground">
+                  {(1 / (1 - parseFloat(icms) / 100 - parseFloat(pis) / 100 - parseFloat(cofins) / 100)).toFixed(4)}
+                </span>
+              </p>
+            )}
           </div>
         )}
 

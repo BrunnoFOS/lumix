@@ -107,6 +107,9 @@ export default async function UCDetalhesPage({ params }: Props) {
           concessionaria_sigla: uc.concessionaria_sigla ?? null,
           modalidade_tarifaria_aneel: uc.modalidade_tarifaria_aneel ?? null,
           contrato_acl_rs_mwh: uc.contrato_acl_rs_mwh ?? null,
+          icms_aliquota: uc.icms_aliquota ?? null,
+          pis_aliquota: uc.pis_aliquota ?? null,
+          cofins_aliquota: uc.cofins_aliquota ?? null,
         }}
         opcoesTarifarias={opcoesTarifarias}
       />

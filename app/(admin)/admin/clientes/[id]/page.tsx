@@ -1,17 +1,8 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, Pencil, Building2, Users } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { getEmpresaComRelacionamentos } from "@/lib/actions/empresas";
 import { getUsuariosEmpresa } from "@/lib/actions/usuarios";
 import { fetchSolisUCs, fetchSungrowUCs } from "@/lib/actions/solis";
@@ -29,7 +20,7 @@ export default async function ClienteDetalhesPage({ params }: Props) {
 
   if (!result) notFound();
 
-  const { ucs, grupoEmpresas, ...empresa } = result;
+  const { ucs, ...empresa } = result;
   const [usuarios, solisUCs, sungrowUCs] = await Promise.all([
     getUsuariosEmpresa(id),
     fetchSolisUCs(),
@@ -122,49 +113,6 @@ export default async function ClienteDetalhesPage({ params }: Props) {
           </CardContent>
         </Card>
       </div>
-
-      {/* Empresas do mesmo grupo */}
-      {grupoEmpresas.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Users className="h-5 w-5" />
-              Mesmo grupo ({grupoEmpresas.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>CNPJ</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {grupoEmpresas.map((e: { id: string; nome: string; cnpj: string; ativa: boolean }) => (
-                  <TableRow key={e.id}>
-                    <TableCell>
-                      <Link
-                        href={`/admin/clientes/${e.id}`}
-                        className="font-medium hover:text-primary hover:underline"
-                      >
-                        {e.nome}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">{formatCNPJ(e.cnpj)}</TableCell>
-                    <TableCell>
-                      <Badge variant={e.ativa ? "default" : "outline"}>
-                        {e.ativa ? "Ativa" : "Inativa"}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
 
       <UsuarioManager
         usuarios={usuarios}

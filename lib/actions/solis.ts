@@ -560,7 +560,7 @@ export async function gerarRelatorioSolis(
   const { calcularGeracaoEstimadaUC } = await import("@/lib/actions/geracao-estimada");
   const { classificarDesempenho } = await import("@/lib/geracao-estimada");
   const { lookupTarifasUC } = await import("@/lib/actions/tarifas-aneel");
-  const { getImpostoVigente } = await import("@/lib/actions/impostos");
+  const { calcularFatorImposto } = await import("@/lib/geracao-estimada");
 
   let estimativa: {
     geracao_estimada_kwh: number | null;
@@ -649,7 +649,7 @@ export async function gerarRelatorioSolis(
     // Buscar dados da UC
     const { data: ucData } = await supabase
       .from("unidades_consumidoras")
-      .select("codigo_uc, grupo_tarifario, subgrupo, concessionaria_sigla, modalidade_tarifaria_aneel, contrato_acl_rs_mwh")
+      .select("codigo_uc, grupo_tarifario, subgrupo, concessionaria_sigla, modalidade_tarifaria_aneel, contrato_acl_rs_mwh, icms_aliquota, pis_aliquota, cofins_aliquota")
       .eq("id", ucId)
       .single();
 
@@ -663,31 +663,31 @@ export async function gerarRelatorioSolis(
         codigo_uc: ucData.codigo_uc,
       };
 
-      // Buscar tarifas ANEEL e impostos vigentes no mês de referência
+      // Buscar tarifas ANEEL e calcular fator de impostos da UC
       if (ucData.concessionaria_sigla && ucData.subgrupo && ucData.grupo_tarifario) {
-        const [tarifasResult, impostoResult] = await Promise.all([
-          lookupTarifasUC(
-            ucData.concessionaria_sigla,
-            ucData.subgrupo,
-            ucData.modalidade_tarifaria_aneel,
-            ucData.grupo_tarifario,
-            mesRef
-          ),
-          getImpostoVigente(ucData.concessionaria_sigla, mesRef),
-        ]);
+        const tarifasResult = await lookupTarifasUC(
+          ucData.concessionaria_sigla,
+          ucData.subgrupo,
+          ucData.modalidade_tarifaria_aneel,
+          ucData.grupo_tarifario,
+          mesRef
+        );
 
         if (tarifasResult) {
           tarifas = tarifasResult;
         }
 
-        // Fator de impostos (1 se não houver cadastro)
-        const fator = impostoResult?.fator_imposto ?? 1;
-        if (impostoResult) {
+        // Fator de impostos da UC (1 se não houver alíquotas cadastradas)
+        const icmsVal = ucData.icms_aliquota ? Number(ucData.icms_aliquota) : 0;
+        const pisVal = ucData.pis_aliquota ? Number(ucData.pis_aliquota) : 0;
+        const cofinsVal = ucData.cofins_aliquota ? Number(ucData.cofins_aliquota) : 0;
+        const fator = (icmsVal || pisVal || cofinsVal) ? calcularFatorImposto(icmsVal, pisVal, cofinsVal) : 1;
+        if (icmsVal || pisVal || cofinsVal) {
           impostos = {
-            icms_aliquota: impostoResult.icms_aliquota,
-            pis_aliquota: impostoResult.pis_aliquota,
-            cofins_aliquota: impostoResult.cofins_aliquota,
-            fator_imposto: impostoResult.fator_imposto,
+            icms_aliquota: icmsVal,
+            pis_aliquota: pisVal,
+            cofins_aliquota: cofinsVal,
+            fator_imposto: Math.round(fator * 10000) / 10000,
           };
         }
 

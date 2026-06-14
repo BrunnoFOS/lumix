@@ -33,7 +33,6 @@ interface Empresa {
   estado: string | null;
   ativa: boolean;
   arquivada: boolean;
-  grupo_id: string | null;
 }
 
 export function ClienteTable({ empresas }: { empresas: Empresa[] }) {

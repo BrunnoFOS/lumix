@@ -41,7 +41,6 @@ export interface Empresa {
   id: string;
   nome: string;
   cnpj: string;
-  grupo_id: string | null;
   endereco: string | null;
   cidade: string | null;
   estado: string | null;
@@ -76,6 +75,9 @@ export interface UnidadeConsumidora {
   degradacao_ano_zero: number | null;
   degradacao_anos_seguintes: number | null;
   contrato_acl_rs_mwh: number | null;
+  icms_aliquota: number | null;
+  pis_aliquota: number | null;
+  cofins_aliquota: number | null;
   ativa: boolean;
   arquivada: boolean;
   station_id: string | null;
@@ -159,20 +161,6 @@ export interface Tarifa {
   ativa: boolean;
   created_at: string;
   updated_at: string;
-}
-
-export interface ImpostoConcessionaria {
-  id: string;
-  concessionaria_sigla: string;
-  uf: string;
-  icms_aliquota: number;
-  pis_aliquota: number;
-  cofins_aliquota: number;
-  vigencia_inicio: string;
-  vigencia_fim: string | null;
-  fonte_url: string | null;
-  observacoes: string | null;
-  created_at: string;
 }
 
 export type StatusFaturaProcessada = "extraindo" | "extraido" | "gerando" | "gerado" | "erro";
