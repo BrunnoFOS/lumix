@@ -201,3 +201,38 @@ export function validarUCParaEstimativa(
   if (faltantes.length > 0) return { valid: false, camposFaltantes: faltantes };
   return { valid: true };
 }
+
+export interface UCParaRelatorio {
+  grupo_tarifario: string | null;
+  subgrupo: string | null;
+  concessionaria_sigla: string | null;
+  modalidade_tarifaria_aneel: string | null;
+  icms_aliquota: number | null;
+  pis_aliquota: number | null;
+  cofins_aliquota: number | null;
+  contrato_acl_rs_mwh: number | null;
+}
+
+/**
+ * Valida se a UC tem todos os campos de classificação tarifária necessários para gerar relatório.
+ */
+export function validarUCParaRelatorio(
+  uc: UCParaRelatorio
+): { valid: true } | { valid: false; camposFaltantes: string[] } {
+  const faltantes: string[] = [];
+
+  if (!uc.grupo_tarifario) faltantes.push("Grupo tarifário");
+  if (!uc.concessionaria_sigla) faltantes.push("Concessionária (sigla ANEEL)");
+  if (!uc.subgrupo) faltantes.push("Subgrupo tarifário");
+  if (!uc.modalidade_tarifaria_aneel) faltantes.push("Modalidade tarifária ANEEL");
+  if (uc.icms_aliquota == null) faltantes.push("Alíquota ICMS");
+  if (uc.pis_aliquota == null) faltantes.push("Alíquota PIS");
+  if (uc.cofins_aliquota == null) faltantes.push("Alíquota COFINS");
+
+  if (uc.grupo_tarifario === "acl" && uc.contrato_acl_rs_mwh == null) {
+    faltantes.push("Contrato ACL (R$/MWh)");
+  }
+
+  if (faltantes.length > 0) return { valid: false, camposFaltantes: faltantes };
+  return { valid: true };
+}

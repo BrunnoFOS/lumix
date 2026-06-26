@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Combobox } from "@/components/ui/combobox";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -75,6 +76,7 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
   const [gerarError, setGerarError] = useState<string | null>(null);
   const [prPercent, setPrPercent] = useState<number | null>(null);
   const [geracaoEstimada, setGeracaoEstimada] = useState<number | null>(null);
+  const [comentario, setComentario] = useState("");
 
   // Filtrar UCs pela empresa selecionada
   const ucsFiltradas = useMemo(
@@ -117,6 +119,7 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
     setGerarError(null);
     setPrPercent(null);
     setGeracaoEstimada(null);
+    setComentario("");
 
     const result = await fetchGeracaoMensalConsolidada(selectedUc.stations, month);
 
@@ -152,7 +155,7 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
       return;
     }
 
-    const result = await gerarRelatorioSolis(primaryStation, month, data);
+    const result = await gerarRelatorioSolis(primaryStation, month, data, comentario || null);
 
     if (result.error) {
       setGerarError(result.error);
@@ -501,6 +504,26 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
                   Média diária
                 </span>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Comentário do admin */}
+          <Card>
+            <CardContent className="p-4">
+              <Label htmlFor="comentario_admin">
+                Comentário para o relatório (opcional)
+              </Label>
+              <Textarea
+                id="comentario_admin"
+                value={comentario}
+                onChange={(e) => setComentario(e.target.value.slice(0, 600))}
+                placeholder="Ex: Geração impactada por dias nublados no início do mês..."
+                rows={3}
+                className="mt-2"
+              />
+              <p className="mt-1 text-xs text-muted-foreground text-right">
+                {600 - comentario.length} caracteres restantes
+              </p>
             </CardContent>
           </Card>
 

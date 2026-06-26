@@ -1,6 +1,6 @@
 "use server";
 
-import { createServerClient, createServiceClient } from "@/lib/supabase/server";
+import { createServerClient } from "@/lib/supabase/server";
 import type { Profile } from "@/types/database";
 
 export async function getCurrentProfile(): Promise<Profile | null> {
@@ -12,10 +12,9 @@ export async function getCurrentProfile(): Promise<Profile | null> {
 
   if (!user) return null;
 
-  const serviceClient = await createServiceClient();
-  const { data: profile } = await serviceClient
+  const { data: profile } = await supabase
     .from("profiles")
-    .select("*")
+    .select("id, role, nome, email, empresa_id, telefone, avatar_url, created_at, updated_at")
     .eq("id", user.id)
     .single();
 
@@ -23,7 +22,7 @@ export async function getCurrentProfile(): Promise<Profile | null> {
 }
 
 /**
- * Retorna todos os empresa_ids acessíveis pelo cliente logado.
+ * Retorna todos os empresa_ids acessiveis pelo cliente logado.
  */
 export async function getEmpresaIdsAcessiveis(empresaId: string): Promise<string[]> {
   return [empresaId];

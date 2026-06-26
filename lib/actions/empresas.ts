@@ -176,7 +176,7 @@ export async function getEmpresa(id: string) {
 
   const { data, error } = await supabase
     .from("empresas")
-    .select("*")
+    .select("id, nome, cnpj, tipo, matriz_id, endereco, cidade, estado, cep, telefone, email, responsavel, ativa, arquivada, created_at, updated_at")
     .eq("id", id)
     .single();
 
@@ -189,7 +189,7 @@ export async function getEmpresaComRelacionamentos(id: string) {
 
   const { data: empresa, error } = await supabase
     .from("empresas")
-    .select("*")
+    .select("id, nome, cnpj, tipo, matriz_id, endereco, cidade, estado, cep, telefone, email, responsavel, ativa, arquivada, created_at, updated_at")
     .eq("id", id)
     .single();
 

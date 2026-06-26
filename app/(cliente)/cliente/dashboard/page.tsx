@@ -1,9 +1,10 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { getCurrentProfile, getEmpresaIdsAcessiveis } from "@/lib/actions/profile";
-import { getResumoGeracaoCliente, getDadosGeracaoCliente } from "@/lib/actions/dados-geracao";
+import { getCurrentProfile } from "@/lib/actions/profile";
+import { getUCIdsCliente, getResumoGeracaoCliente, getDadosGeracaoCliente, getEconomiaCliente } from "@/lib/actions/dados-geracao";
 import { DashboardCards } from "@/components/cliente/DashboardCards";
 import { GeracaoChart } from "@/components/cliente/GeracaoChart";
+import { EconomiaChart } from "@/components/cliente/EconomiaChart";
 import { DashboardPeriodFilter } from "@/components/cliente/DashboardPeriodFilter";
 
 interface Props {
@@ -11,20 +12,26 @@ interface Props {
 }
 
 export default async function ClienteDashboardPage({ searchParams }: Props) {
-  const profile = await getCurrentProfile();
+  // Buscar profile e searchParams em paralelo
+  const [profile, params] = await Promise.all([
+    getCurrentProfile(),
+    searchParams,
+  ]);
 
   if (!profile || !profile.empresa_id) {
     redirect("/login");
   }
 
-  const params = await searchParams;
-  const empresaIds = await getEmpresaIdsAcessiveis(profile.empresa_id);
-  const [resumo, dadosGeracao] = await Promise.all([
-    getResumoGeracaoCliente(empresaIds, params.mes),
-    getDadosGeracaoCliente(empresaIds),
+  // Buscar UCs uma unica vez, depois passar os IDs para as 3 queries
+  const ucIds = await getUCIdsCliente(profile.empresa_id);
+
+  const [resumo, dadosGeracao, dadosEconomia] = await Promise.all([
+    getResumoGeracaoCliente(profile.empresa_id, params.mes, ucIds),
+    getDadosGeracaoCliente(profile.empresa_id, ucIds),
+    getEconomiaCliente(profile.empresa_id, ucIds),
   ]);
 
-  // Agrupar dados por mês para o gráfico (últimos 12 meses)
+  // Agrupar dados por mes para o grafico (ultimos 12 meses)
   const dadosPorMes = new Map<string, { geracao_kwh: number; geracao_estimada_kwh: number }>();
   for (const dado of dadosGeracao) {
     const existing = dadosPorMes.get(dado.mes_referencia);
@@ -43,6 +50,21 @@ export default async function ClienteDashboardPage({ searchParams }: Props) {
     .map(([mes, valores]) => ({
       mes_referencia: mes,
       ...valores,
+    }))
+    .sort((a, b) => a.mes_referencia.localeCompare(b.mes_referencia))
+    .slice(-12);
+
+  // Agrupar economia por mes (somar UCs do mesmo mes)
+  const economiaPorMes = new Map<string, number>();
+  for (const dado of dadosEconomia) {
+    const existing = economiaPorMes.get(dado.mes_referencia) ?? 0;
+    economiaPorMes.set(dado.mes_referencia, existing + (dado.economia_estimada ?? 0));
+  }
+
+  const economiaData = Array.from(economiaPorMes.entries())
+    .map(([mes, valor]) => ({
+      mes_referencia: mes,
+      economia_reais: valor,
     }))
     .sort((a, b) => a.mes_referencia.localeCompare(b.mes_referencia))
     .slice(-12);
@@ -70,6 +92,8 @@ export default async function ClienteDashboardPage({ searchParams }: Props) {
       />
 
       <GeracaoChart dados={chartData} />
+
+      <EconomiaChart dados={economiaData} />
     </div>
   );
 }

@@ -4,24 +4,41 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { fetchAlertas, type AlertaSummary } from "@/lib/actions/alertas";
 
 const POLL_INTERVAL = 300_000; // 5 minutos
+const STALE_THRESHOLD = 30_000; // 30 segundos - nao refetch se dados tem menos de 30s
+
+// Compartilhar estado entre instancias do hook para evitar fetches duplicados
+let sharedData: { summary: AlertaSummary | null; ativos: number; fetchedAt: number } = {
+  summary: null,
+  ativos: 0,
+  fetchedAt: 0,
+};
 
 export function useAlertas() {
-  const [ativos, setAtivos] = useState<number>(0);
-  const [summary, setSummary] = useState<AlertaSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [ativos, setAtivos] = useState<number>(sharedData.ativos);
+  const [summary, setSummary] = useState<AlertaSummary | null>(sharedData.summary);
+  const [loading, setLoading] = useState(sharedData.fetchedAt === 0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isVisibleRef = useRef(true);
 
-  const poll = useCallback(async () => {
+  const poll = useCallback(async (force = false) => {
+    // Pular se dados ainda sao frescos (menos de 30s)
+    if (!force && Date.now() - sharedData.fetchedAt < STALE_THRESHOLD) {
+      setAtivos(sharedData.ativos);
+      setSummary(sharedData.summary);
+      setLoading(false);
+      return;
+    }
+
     try {
       const result = await fetchAlertas();
       if (!result.error && result.summary) {
+        sharedData = {
+          summary: result.summary,
+          ativos: result.summary.ativos,
+          fetchedAt: Date.now(),
+        };
         setAtivos(result.summary.ativos);
         setSummary(result.summary);
-      }
-      // Em caso de erro, manter ultimo valor conhecido (não atualizar state)
-      if (result.error) {
-        console.error("[useAlertas] erro:", result.error);
       }
     } catch (err) {
       console.error("[useAlertas] erro inesperado:", err);
@@ -31,15 +48,14 @@ export function useAlertas() {
   }, []);
 
   useEffect(() => {
-    // Primeira chamada imediata
+    // Primeira chamada - usa cache se fresco
     poll();
 
-    // Polling a cada 5 min
     function startInterval() {
       stopInterval();
       intervalRef.current = setInterval(() => {
         if (isVisibleRef.current) {
-          poll();
+          poll(true); // Polling forcado
         }
       }, POLL_INTERVAL);
     }
@@ -51,12 +67,11 @@ export function useAlertas() {
       }
     }
 
-    // Page Visibility API — pausar quando aba inativa
+    // Page Visibility API - pausar quando aba inativa
     function handleVisibility() {
       isVisibleRef.current = !document.hidden;
       if (!document.hidden) {
-        // Refetch ao voltar para a aba
-        poll();
+        poll(); // Usa stale check
         startInterval();
       } else {
         stopInterval();

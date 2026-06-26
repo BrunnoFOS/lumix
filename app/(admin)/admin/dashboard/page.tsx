@@ -2,106 +2,79 @@ import { createServerClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LinkButton } from "@/components/ui/link-button";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Zap, FileText, DollarSign, TrendingUp, Activity } from "lucide-react";
-import { formatCurrency, formatKWh, formatMesReferencia } from "@/lib/utils";
+import { Building2, Zap, FileText, DollarSign } from "lucide-react";
+import { formatCurrency, formatKWh } from "@/lib/utils";
 import { SolisGeracaoMensal } from "@/components/admin/SolisGeracaoMensal";
 import { getUCsComStations } from "@/lib/actions/unidades";
 import { getEmpresas } from "@/lib/actions/empresas";
 
-async function getEmpresasDashboard(supabase: Awaited<ReturnType<typeof createServerClient>>) {
-  // Buscar empresas ativas com suas UCs
-  const { data: empresas } = await supabase
-    .from("empresas")
-    .select("id, nome, cnpj, ativa")
-    .eq("ativa", true)
-    .eq("arquivada", false)
-    .order("nome");
-
-  if (!empresas || empresas.length === 0) return [];
-
-  // Buscar mês atual
-  const now = new Date();
-  const mesAtual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-
-  // Buscar dados de todas as UCs, geração e faturas do mês atual
-  const empresaIds = empresas.map((e) => e.id);
-
-  const [{ data: ucs }, { data: relatorios }, { data: faturas }] = await Promise.all([
-    supabase
-      .from("unidades_consumidoras")
-      .select("id, empresa_id, geracao_estimada_mensal_kwh")
-      .in("empresa_id", empresaIds)
-      .eq("ativa", true),
-    supabase
-      .from("relatorios")
-      .select("empresa_id, status_envio")
-      .in("empresa_id", empresaIds)
-      .eq("status_envio", "pendente"),
-    supabase
-      .from("faturas")
-      .select("uc_id, economia_estimada, valor_faturado, uc:unidades_consumidoras!inner(empresa_id)")
-      .eq("mes_referencia", mesAtual),
-  ]);
-
-  // Buscar dados de geração do mês atual
-  const ucIds = ucs?.map((uc) => uc.id) ?? [];
-  const { data: geracoes } = ucIds.length > 0
-    ? await supabase
-        .from("dados_geracao")
-        .select("uc_id, geracao_kwh, geracao_estimada_kwh, indice_performance")
-        .in("uc_id", ucIds)
-        .eq("mes_referencia", mesAtual)
-    : { data: [] };
-
-  // Mapear dados por empresa
-  return empresas.map((empresa) => {
-    const empresaUCs = ucs?.filter((uc) => uc.empresa_id === empresa.id) ?? [];
-    const empresaUCIds = empresaUCs.map((uc) => uc.id);
-    const empresaGeracoes = geracoes?.filter((g) => empresaUCIds.includes(g.uc_id)) ?? [];
-    const empresaFaturas = faturas?.filter((f) => {
-      const ucRaw = f.uc as unknown;
-      const uc = Array.isArray(ucRaw) ? ucRaw[0] : ucRaw;
-      return (uc as { empresa_id?: string })?.empresa_id === empresa.id;
-    }) ?? [];
-    const empresaRelatorios = relatorios?.filter((r) => r.empresa_id === empresa.id) ?? [];
-
-    const geracao_total = empresaGeracoes.reduce((sum, g) => sum + (g.geracao_kwh || 0), 0);
-    const economia_total = empresaFaturas.reduce((sum, f) => sum + ((f.economia_estimada || 0) as number), 0);
-    const qtd_ucs = empresaUCs.length;
-    const relatorios_pendentes = empresaRelatorios.length;
-
-    // Performance média
-    const performances = empresaGeracoes.filter((g) => g.indice_performance).map((g) => g.indice_performance);
-    const mainPerformance = performances.length > 0 ? performances[0] : null;
-
-    return {
-      ...empresa,
-      qtd_ucs,
-      geracao_total,
-      economia_total,
-      relatorios_pendentes,
-      performance: mainPerformance,
-    };
-  });
-}
-
 export default async function AdminDashboardPage() {
   const supabase = await createServerClient();
 
-  const [empresasRes, ucsRes, relatoriosRes, faturasRes] = await Promise.all([
+  const now = new Date();
+  const mesAtual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+
+  // Tudo em um unico Promise.all - sem batches sequenciais
+  const [
+    empresasRes,
+    ucsRes,
+    relatoriosRes,
+    faturasRes,
+    { data: empresas },
+    { data: ucs },
+    { data: relatoriosPendentes },
+    { data: faturasMes },
+    { data: geracoesMes },
+    empresasList,
+    ucsComStations,
+  ] = await Promise.all([
+    // Stats counts
     supabase.from("empresas").select("id", { count: "exact", head: true }).eq("arquivada", false),
     supabase.from("unidades_consumidoras").select("id", { count: "exact", head: true }).eq("arquivada", false),
     supabase.from("relatorios").select("id", { count: "exact", head: true }).eq("status_envio", "pendente"),
     supabase.from("faturas").select("id", { count: "exact", head: true }).eq("status", "pendente"),
-  ]);
-
-  const [empresasDashboard, empresasList, ucsComStations] = await Promise.all([
-    getEmpresasDashboard(supabase),
+    // Dashboard data - tudo em paralelo
+    supabase.from("empresas").select("id, nome, cnpj, ativa").eq("ativa", true).eq("arquivada", false).order("nome"),
+    supabase.from("unidades_consumidoras").select("id, empresa_id, geracao_estimada_mensal_kwh").eq("ativa", true),
+    supabase.from("relatorios").select("empresa_id, status_envio").eq("status_envio", "pendente"),
+    supabase.from("faturas").select("uc_id, economia_estimada, uc:unidades_consumidoras!inner(empresa_id)").eq("mes_referencia", mesAtual),
+    supabase.from("dados_geracao").select("uc_id, geracao_kwh, geracao_estimada_kwh, indice_performance").eq("mes_referencia", mesAtual),
+    // Queries externas
     getEmpresas(),
     getUCsComStations(),
   ]);
 
   const empresasOptions = empresasList.map((e) => ({ id: e.id, nome: e.nome }));
+
+  // Montar mapa de UC -> empresa para filtrar geracoes
+  const ucEmpresaMap = new Map(ucs?.map((uc) => [uc.id, uc.empresa_id]) ?? []);
+
+  // Montar dados por empresa
+  const empresasDashboard = (empresas ?? []).map((empresa) => {
+    const empresaUCs = ucs?.filter((uc) => uc.empresa_id === empresa.id) ?? [];
+    const empresaUCIds = new Set(empresaUCs.map((uc) => uc.id));
+    const empresaGeracoes = geracoesMes?.filter((g) => empresaUCIds.has(g.uc_id)) ?? [];
+    const empresaFaturas = faturasMes?.filter((f) => {
+      const ucRaw = f.uc as unknown;
+      const uc = Array.isArray(ucRaw) ? ucRaw[0] : ucRaw;
+      return (uc as { empresa_id?: string })?.empresa_id === empresa.id;
+    }) ?? [];
+    const empresaRelatorios = relatoriosPendentes?.filter((r) => r.empresa_id === empresa.id) ?? [];
+
+    const geracao_total = empresaGeracoes.reduce((sum, g) => sum + (g.geracao_kwh || 0), 0);
+    const economia_total = empresaFaturas.reduce((sum, f) => sum + ((f.economia_estimada || 0) as number), 0);
+
+    const performances = empresaGeracoes.filter((g) => g.indice_performance).map((g) => g.indice_performance);
+
+    return {
+      ...empresa,
+      qtd_ucs: empresaUCs.length,
+      geracao_total,
+      economia_total,
+      relatorios_pendentes: empresaRelatorios.length,
+      performance: performances.length > 0 ? performances[0] : null,
+    };
+  });
 
   const stats = [
     { label: "Clientes", value: empresasRes.count ?? 0, icon: Building2, href: "/admin/clientes", color: "text-primary", bg: "bg-orange-50" },
@@ -179,13 +152,13 @@ export default async function AdminDashboardPage() {
                   <div>
                     <p className="text-xs text-muted-foreground">Geração</p>
                     <p className="text-sm font-semibold">
-                      {empresa.geracao_total > 0 ? formatKWh(empresa.geracao_total) : "—"}
+                      {empresa.geracao_total > 0 ? formatKWh(empresa.geracao_total) : "\u2014"}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Economia</p>
                     <p className="text-sm font-semibold">
-                      {empresa.economia_total > 0 ? formatCurrency(empresa.economia_total) : "—"}
+                      {empresa.economia_total > 0 ? formatCurrency(empresa.economia_total) : "\u2014"}
                     </p>
                   </div>
                   <div>

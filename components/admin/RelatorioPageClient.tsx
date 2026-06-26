@@ -17,6 +17,7 @@ interface UC {
 
 interface RelatorioRow {
   id: string;
+  uc_id: string;
   mes_referencia: string;
   titulo: string;
   geracao_kwh: number | null;
@@ -34,9 +35,11 @@ interface RelatorioRow {
 export function RelatorioPageClient({
   relatorios,
   ucs,
+  faturasProcessadasMap,
 }: {
   relatorios: RelatorioRow[];
   ucs: UC[];
+  faturasProcessadasMap?: Record<string, { id: string; pdf_fatura_url: string | null }>;
 }) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
@@ -69,7 +72,7 @@ export function RelatorioPageClient({
         />
       )}
 
-      <RelatorioTable relatorios={relatorios} />
+      <RelatorioTable relatorios={relatorios} faturasProcessadasMap={faturasProcessadasMap} />
     </>
   );
 }

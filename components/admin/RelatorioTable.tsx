@@ -13,6 +13,7 @@ import {
   Upload,
   Loader2,
   ExternalLink,
+  FileSearch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { exportToCSV } from "@/lib/export-csv";
@@ -50,6 +51,7 @@ import { createClient } from "@/lib/supabase/client";
 
 interface RelatorioRow {
   id: string;
+  uc_id: string;
   mes_referencia: string;
   titulo: string;
   geracao_kwh: number | null;
@@ -96,8 +98,10 @@ const PERFORMANCE_LABELS: Record<string, string> = {
 
 export function RelatorioTable({
   relatorios,
+  faturasProcessadasMap,
 }: {
   relatorios: RelatorioRow[];
+  faturasProcessadasMap?: Record<string, { id: string; pdf_fatura_url: string | null }>;
 }) {
   const router = useRouter();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -322,6 +326,21 @@ export function RelatorioTable({
                             Ver anexo
                           </DropdownMenuItem>
                         )}
+                        {(() => {
+                          const fpKey = `${rel.uc_id}|${rel.mes_referencia}`;
+                          const fp = faturasProcessadasMap?.[fpKey];
+                          if (!fp?.pdf_fatura_url) return null;
+                          return (
+                            <DropdownMenuItem
+                              onClick={() =>
+                                window.open(fp.pdf_fatura_url!, "_blank")
+                              }
+                            >
+                              <FileSearch className="mr-2 h-4 w-4" />
+                              Ver fatura original
+                            </DropdownMenuItem>
+                          );
+                        })()}
                         {isPendente && (
                           <>
                             <DropdownMenuItem

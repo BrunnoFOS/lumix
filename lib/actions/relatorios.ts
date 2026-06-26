@@ -217,7 +217,7 @@ export async function getRelatorio(id: string) {
 
   const { data, error } = await supabase
     .from("relatorios")
-    .select("*, uc:unidades_consumidoras(id, codigo_uc, titular), empresa:empresas(id, nome)")
+    .select("id, uc_id, empresa_id, mes_referencia, titulo, pdf_url, geracao_kwh, geracao_estimada_kwh, economia_reais, indice_performance, status_envio, gerado_por, tipo_relatorio, fatura_id, arquivado, created_at, updated_at, uc:unidades_consumidoras(id, codigo_uc, titular), empresa:empresas(id, nome)")
     .eq("id", id)
     .single();
 
@@ -225,16 +225,34 @@ export async function getRelatorio(id: string) {
   return data;
 }
 
-export async function getRelatoriosCliente(empresaIds: string | string[]) {
+interface FiltrosRelatorioCliente {
+  ucId?: string;
+  mesInicio?: string;
+  mesFim?: string;
+}
+
+export async function getRelatoriosCliente(empresaIds: string | string[], filtros?: FiltrosRelatorioCliente) {
   const supabase = await createServerClient();
   const ids = Array.isArray(empresaIds) ? empresaIds : [empresaIds];
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("relatorios")
     .select("id, mes_referencia, titulo, geracao_kwh, geracao_estimada_kwh, economia_reais, indice_performance, status_envio, tipo_relatorio, pdf_url, uc:unidades_consumidoras(id, codigo_uc)")
     .in("empresa_id", ids)
     .eq("status_envio", "enviado")
     .order("mes_referencia", { ascending: false });
+
+  if (filtros?.ucId) {
+    query = query.eq("uc_id", filtros.ucId);
+  }
+  if (filtros?.mesInicio) {
+    query = query.gte("mes_referencia", filtros.mesInicio);
+  }
+  if (filtros?.mesFim) {
+    query = query.lte("mes_referencia", filtros.mesFim);
+  }
+
+  const { data, error } = await query;
 
   if (error) return [];
 
@@ -254,6 +272,7 @@ export async function criarRelatorioComAnexo(formData: FormData): Promise<Action
   const empresa_id = formData.get("empresa_id") as string;
   const mes_referencia = formData.get("mes_referencia") as string;
   const pdf_url = (formData.get("pdf_url") as string) || null;
+  const comentarioAdmin = (formData.get("comentario_admin") as string) || null;
 
   if (!uc_id || !empresa_id || !mes_referencia) {
     return { error: "UC, empresa e mês de referência são obrigatórios." };
@@ -295,12 +314,54 @@ export async function criarRelatorioComAnexo(formData: FormData): Promise<Action
       geracao_estimada_kwh,
       status_envio: "pendente",
       gerado_por: "manual",
+      tipo_relatorio: "real",
     })
     .select("id")
     .single();
 
   if (error) {
     return { error: "Erro ao criar relatório." };
+  }
+
+  // Enviar ao N8N com arquivo_url obrigatório
+  const n8nUser = process.env.N8N_API_USER;
+  const n8nPassword = process.env.N8N_API_PASSWORD;
+
+  if (n8nUser && n8nPassword) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60000);
+
+    try {
+      const credentials = Buffer.from(`${n8nUser}:${n8nPassword}`).toString("base64");
+
+      await fetch(
+        "https://n8n-n8n.nt4zcb.easypanel.host/webhook/7d6333a5-5c73-4be8-a3e3-937238d4f3a8",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Basic ${credentials}`,
+          },
+          body: JSON.stringify({
+            relatorio_id: data.id,
+            uc_id,
+            empresa_id,
+            mes_referencia,
+            arquivo_url: pdf_url,
+            codigo_uc: uc.codigo_uc,
+            geracao_estimada_kwh,
+            comentario_admin: comentarioAdmin || null,
+            tipo_relatorio: "real",
+          }),
+          signal: controller.signal,
+        }
+      );
+
+      clearTimeout(timeout);
+    } catch {
+      clearTimeout(timeout);
+      // Relatório já criado no banco — N8N processará depois se necessário
+    }
   }
 
   revalidatePath("/admin/relatorios");

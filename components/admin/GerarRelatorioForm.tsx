@@ -5,6 +5,7 @@ import { Upload, X, FileText, FileImage, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Combobox } from "@/components/ui/combobox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
@@ -37,6 +38,7 @@ export function GerarRelatorioForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ucId, setUcId] = useState("");
+  const [comentario, setComentario] = useState("");
 
   const ucOptions = useMemo(
     () =>
@@ -158,6 +160,8 @@ export function GerarRelatorioForm({
       } else {
         submitData.set("pdf_url", urlData.publicUrl);
       }
+
+      submitData.set("comentario_admin", comentario || "");
 
       const result = await criarRelatorioComAnexo(submitData);
 
@@ -282,6 +286,25 @@ export function GerarRelatorioForm({
                 </div>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <Label htmlFor="comentario_admin">
+              Comentário para o relatório (opcional)
+            </Label>
+            <Textarea
+              id="comentario_admin"
+              value={comentario}
+              onChange={(e) => setComentario(e.target.value.slice(0, 600))}
+              placeholder="Ex: Geração impactada por dias nublados no início do mês..."
+              rows={3}
+              className="mt-2"
+            />
+            <p className="mt-1 text-xs text-muted-foreground text-right">
+              {600 - comentario.length} caracteres restantes
+            </p>
           </CardContent>
         </Card>
 

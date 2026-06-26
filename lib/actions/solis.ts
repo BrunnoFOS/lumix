@@ -1,7 +1,5 @@
 "use server";
 
-import { unstable_cache } from "next/cache";
-
 // ——— Tipos de geração mensal ———
 
 export interface SolisGeracaoDia {
@@ -61,6 +59,9 @@ export async function fetchSolisGeracaoMensal(
     return { data: null, error: "Variáveis de ambiente N8N não configuradas." };
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000); // 30s
+
   try {
     const credentials = Buffer.from(`${user}:${password}`).toString("base64");
     const url = `https://n8n-n8n.nt4zcb.easypanel.host/webhook/solis-geracao-mensal?month=${month}&station_id=${stationId}`;
@@ -72,8 +73,11 @@ export async function fetchSolisGeracaoMensal(
         Authorization: `Basic ${credentials}`,
       },
       body: JSON.stringify({}),
-      next: { revalidate: 0 },
+      cache: "no-store",
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     if (!res.ok) {
       return {
@@ -91,6 +95,7 @@ export async function fetchSolisGeracaoMensal(
 
     return { data: result as SolisGeracaoMensal };
   } catch {
+    clearTimeout(timeout);
     return { data: null, error: "Erro de conexão com o serviço Solis." };
   }
 }
@@ -164,7 +169,7 @@ async function fetchUCsFromCache(provider: "solis" | "sungrow"): Promise<UsinaUC
 
   const { data, error } = await supabase
     .from("usinas_cache")
-    .select("*")
+    .select("station_id, provider, station_name, cidade_uf, potencia_instalada_kwp, qtd_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, inversores_detalhe, synced_at")
     .eq("provider", provider)
     .order("station_name");
 
@@ -172,61 +177,13 @@ async function fetchUCsFromCache(provider: "solis" | "sungrow"): Promise<UsinaUC
   return (data as UsinaCacheRow[]).map(cacheRowToUsinaUC);
 }
 
-// Fallback: webhook direto (usado se cache vazio, ex: Solis antes do cron popular)
-
-const WEBHOOK_SOLIS = "https://n8n-n8n.nt4zcb.easypanel.host/webhook/sync-ucs-solis";
-
-function getCredentials(): string | null {
-  const user = process.env.N8N_API_USER;
-  const password = process.env.N8N_API_PASSWORD;
-  if (!user || !password) return null;
-  return Buffer.from(`${user}:${password}`).toString("base64");
-}
-
-async function fetchSolisFromWebhook(): Promise<UsinaUC[]> {
-  const credentials = getCredentials();
-  if (!credentials) return [];
-
-  const res = await fetch(WEBHOOK_SOLIS, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Basic ${credentials}`,
-    },
-    body: JSON.stringify({}),
-  });
-
-  if (!res.ok) return [];
-
-  const raw = await res.json();
-  const ucs: UsinaUC[] = Array.isArray(raw) ? raw : [];
-
-  const seen = new Set<string>();
-  return ucs.filter((uc) => {
-    if (seen.has(uc.station_id)) return false;
-    seen.add(uc.station_id);
-    return true;
-  });
-}
-
-const getCachedSolisWebhook = unstable_cache(
-  fetchSolisFromWebhook,
-  ["solis-ucs-webhook"],
-  { revalidate: 300 }
-);
-
 export async function fetchSolisUCs(): Promise<{
   data: UsinaUC[];
   error?: string;
 }> {
   try {
-    // Tenta cache Supabase primeiro
     const cached = await fetchUCsFromCache("solis");
-    if (cached.length > 0) return { data: cached };
-
-    // Fallback: webhook direto
-    const data = await getCachedSolisWebhook();
-    return { data };
+    return { data: cached };
   } catch {
     return { data: [], error: "Erro ao buscar usinas Solis." };
   }
@@ -237,9 +194,8 @@ export async function fetchSungrowUCs(): Promise<{
   error?: string;
 }> {
   try {
-    // Lê sempre do cache Supabase (populado pelo cron n8n)
-    const data = await fetchUCsFromCache("sungrow");
-    return { data };
+    const cached = await fetchUCsFromCache("sungrow");
+    return { data: cached };
   } catch {
     return { data: [], error: "Erro ao buscar usinas SunGrow." };
   }
@@ -349,6 +305,9 @@ export async function fetchSungrowGeracaoMensal(
     return { data: null, error: "Variáveis de ambiente N8N não configuradas." };
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000); // 30s
+
   try {
     const credentials = Buffer.from(`${user}:${password}`).toString("base64");
     const url = `${WEBHOOK_GERACAO_SUNGROW}?month=${month}&station_id=${stationId}`;
@@ -360,8 +319,11 @@ export async function fetchSungrowGeracaoMensal(
         Authorization: `Basic ${credentials}`,
       },
       body: JSON.stringify({}),
-      next: { revalidate: 0 },
+      cache: "no-store",
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     if (!res.ok) {
       return { data: null, error: `Erro ao buscar geração mensal SunGrow (${res.status}).` };
@@ -376,6 +338,7 @@ export async function fetchSungrowGeracaoMensal(
 
     return { data: normalizeSungrowToGeracaoMensal(result, stationId) };
   } catch {
+    clearTimeout(timeout);
     return { data: null, error: "Erro de conexão com o serviço SunGrow." };
   }
 }
@@ -534,19 +497,21 @@ export async function fetchGeracaoMensalConsolidada(
 export async function gerarRelatorioConsolidado(
   stations: { station_id: string; provider: "solis" | "sungrow" }[],
   month: string,
-  dadosGeracao: SolisGeracaoMensal
+  dadosGeracao: SolisGeracaoMensal,
+  comentarioAdmin?: string | null
 ): Promise<{ error?: string; success?: boolean }> {
   // Usa o primeiro station_id como referência principal e envia dados já consolidados
   const primaryStationId = stations[0]?.station_id;
   if (!primaryStationId) return { error: "Nenhum station_id informado." };
 
-  return gerarRelatorioSolis(primaryStationId, month, dadosGeracao);
+  return gerarRelatorioSolis(primaryStationId, month, dadosGeracao, comentarioAdmin);
 }
 
 export async function gerarRelatorioSolis(
   stationId: string,
   month: string,
-  dadosGeracao: SolisGeracaoMensal
+  dadosGeracao: SolisGeracaoMensal,
+  comentarioAdmin?: string | null
 ): Promise<{ error?: string; success?: boolean }> {
   const user = process.env.N8N_API_USER;
   const password = process.env.N8N_API_PASSWORD;
@@ -558,7 +523,7 @@ export async function gerarRelatorioSolis(
   // Buscar UC vinculada para calcular geração estimada, PR% e tarifas
   const supabase = await createServerClient();
   const { calcularGeracaoEstimadaUC } = await import("@/lib/actions/geracao-estimada");
-  const { classificarDesempenho } = await import("@/lib/geracao-estimada");
+  const { classificarDesempenho, validarUCParaRelatorio } = await import("@/lib/geracao-estimada");
   const { lookupTarifasUC } = await import("@/lib/actions/tarifas-aneel");
   const { calcularFatorImposto } = await import("@/lib/geracao-estimada");
 
@@ -642,6 +607,10 @@ export async function gerarRelatorioSolis(
     ucId = ucLegado?.id;
   }
 
+  if (!ucId) {
+    return { error: "Nenhuma UC vinculada a esta usina. Vincule a UC ao station_id primeiro." };
+  }
+
   if (ucId) {
     const mesRef = `${month}-01`;
     const geracaoReal = dadosGeracao.totais.geracao_kwh;
@@ -654,6 +623,23 @@ export async function gerarRelatorioSolis(
       .single();
 
     if (ucData) {
+      const validacao = validarUCParaRelatorio({
+        grupo_tarifario: ucData.grupo_tarifario,
+        subgrupo: ucData.subgrupo,
+        concessionaria_sigla: ucData.concessionaria_sigla,
+        modalidade_tarifaria_aneel: ucData.modalidade_tarifaria_aneel,
+        icms_aliquota: ucData.icms_aliquota ? Number(ucData.icms_aliquota) : null,
+        pis_aliquota: ucData.pis_aliquota ? Number(ucData.pis_aliquota) : null,
+        cofins_aliquota: ucData.cofins_aliquota ? Number(ucData.cofins_aliquota) : null,
+        contrato_acl_rs_mwh: ucData.contrato_acl_rs_mwh ? Number(ucData.contrato_acl_rs_mwh) : null,
+      });
+
+      if (!validacao.valid) {
+        return {
+          error: `Classificação tarifária incompleta na UC. Campos faltantes: ${validacao.camposFaltantes.join(", ")}. Acesse a aba de classificação tarifária da UC para preencher.`,
+        };
+      }
+
       ucInfo = {
         grupo_tarifario: ucData.grupo_tarifario,
         subgrupo: ucData.subgrupo,
@@ -750,7 +736,28 @@ export async function gerarRelatorioSolis(
         ghi_wh_m2_dia: resultado.data.ghi_wh_m2_dia,
       };
     }
+
+    // Persistir dados de geração para o dashboard do cliente
+    await supabase
+      .from("dados_geracao")
+      .upsert(
+        {
+          uc_id: ucId,
+          mes_referencia: mesRef,
+          geracao_kwh: geracaoReal,
+          geracao_estimada_kwh: estimativa.geracao_estimada_kwh,
+          irradiacao_media: estimativa.ghi_wh_m2_dia,
+          performance_ratio: estimativa.pr_percentual,
+          indice_performance: estimativa.pr_classificacao
+            ? estimativa.pr_classificacao.toLowerCase()
+            : null,
+        },
+        { onConflict: "uc_id,mes_referencia" }
+      );
   }
+
+  const relController = new AbortController();
+  const relTimeout = setTimeout(() => relController.abort(), 60000); // 60s para geração de relatório
 
   try {
     const credentials = Buffer.from(`${user}:${password}`).toString("base64");
@@ -773,9 +780,13 @@ export async function gerarRelatorioSolis(
           tarifas_com_impostos,
           impostos,
           economia,
+          comentario_admin: comentarioAdmin || null,
         }),
+        signal: relController.signal,
       }
     );
+
+    clearTimeout(relTimeout);
 
     if (!res.ok) {
       return {
@@ -785,6 +796,7 @@ export async function gerarRelatorioSolis(
 
     return { success: true };
   } catch (err) {
+    clearTimeout(relTimeout);
     return { error: `Erro de conexão ao gerar relatório: ${err instanceof Error ? err.message : String(err)}` };
   }
 }
@@ -838,7 +850,7 @@ export async function fetchGeracaoMensalAuto(
   return { ...result, isConsolidated: true };
 }
 
-// ——— UCs unificadas (banco + Solis) para selectors ———
+// ——— UCs unificadas (banco + cache) para selectors ———
 
 export interface UCOption {
   id: string;

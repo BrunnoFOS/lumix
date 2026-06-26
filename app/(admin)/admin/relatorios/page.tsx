@@ -4,7 +4,8 @@ import { RelatorioSearch } from "@/components/admin/RelatorioSearch";
 import { RelatorioPageClient } from "@/components/admin/RelatorioPageClient";
 import { SolisGeracaoMensal } from "@/components/admin/SolisGeracaoMensal";
 import { createServerClient } from "@/lib/supabase/server";
-import { getUCsComSolis } from "@/lib/actions/solis";
+import { fetchSolisUCs } from "@/lib/actions/solis";
+import type { UCOption } from "@/lib/actions/solis";
 import { getUCsComStations } from "@/lib/actions/unidades";
 import { getEmpresas } from "@/lib/actions/empresas";
 
@@ -32,14 +33,48 @@ async function fetchDbUcs() {
 
 export default async function RelatoriosPage({ searchParams }: Props) {
   const params = await searchParams;
-  const [relatorios, empresas, ucsComStations, dbUcs] = await Promise.all([
+
+  const supabase = await createServerClient();
+
+  // Buscar tudo em paralelo, incluindo Solis UCs e faturas processadas
+  const [relatorios, empresas, ucsComStations, dbUcs, solisResult, { data: fpsData }] = await Promise.all([
     getRelatorios(params.search, params.status),
     getEmpresas(),
     getUCsComStations(),
     fetchDbUcs(),
+    fetchSolisUCs(),
+    supabase
+      .from("faturas_processadas")
+      .select("id, uc_id, mes_referencia, pdf_fatura_url")
+      .eq("status", "gerado"),
   ]);
 
-  const ucs = await getUCsComSolis(dbUcs);
+  // Map de faturas processadas por uc_id|mes_referencia
+  const faturasProcessadasMap: Record<string, { id: string; pdf_fatura_url: string | null }> = {};
+  for (const fp of fpsData ?? []) {
+    faturasProcessadasMap[`${fp.uc_id}|${fp.mes_referencia}`] = {
+      id: fp.id,
+      pdf_fatura_url: fp.pdf_fatura_url,
+    };
+  }
+
+  // Montar UCOptions sem query adicional (inline do que getUCsComSolis fazia)
+  const dbOptions: UCOption[] = dbUcs.map((uc) => ({
+    ...uc,
+    source: "database" as const,
+  }));
+
+  const solisOptions: UCOption[] = solisResult.data
+    .filter((s) => !dbUcs.some((db) => db.codigo_uc === s.station_id))
+    .map((s) => ({
+      id: `solis:${s.station_id}`,
+      codigo_uc: s.station_name,
+      empresa: null,
+      source: "solis" as const,
+      station_name: s.station_name,
+    }));
+
+  const ucs = [...dbOptions, ...solisOptions];
 
   const empresasOptions = empresas.map((e) => ({ id: e.id, nome: e.nome }));
 
@@ -61,7 +96,7 @@ export default async function RelatoriosPage({ searchParams }: Props) {
         <RelatorioSearch />
       </Suspense>
 
-      <RelatorioPageClient relatorios={relatorios} ucs={ucs} />
+      <RelatorioPageClient relatorios={relatorios} ucs={ucs} faturasProcessadasMap={faturasProcessadasMap} />
     </div>
   );
 }

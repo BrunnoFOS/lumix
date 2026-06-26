@@ -19,14 +19,20 @@ async function enviarWebhookFatura(payload: {
   role: "admin" | "cliente";
   user_id: string;
 }) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
   try {
     const res = await fetch(WEBHOOK_FATURA_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     console.log("[webhook fatura]", res.status, await res.text());
   } catch (err) {
+    clearTimeout(timeout);
     console.error("[webhook fatura] erro:", err);
   }
 }
@@ -365,6 +371,9 @@ export async function createFaturaComGeracao(formData: FormData): Promise<Action
     .eq("id", user?.id ?? "")
     .single();
 
+  const controller = new AbortController();
+  const webhookTimeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
   try {
     const res = await fetch(WEBHOOK_FATURA_URL, {
       method: "POST",
@@ -379,9 +388,12 @@ export async function createFaturaComGeracao(formData: FormData): Promise<Action
         user_id: user?.id ?? "",
         dados_geracao: dadosGeracao,
       }),
+      signal: controller.signal,
     });
+    clearTimeout(webhookTimeout);
     console.log("[webhook fatura+geracao]", res.status);
   } catch (err) {
+    clearTimeout(webhookTimeout);
     console.error("[webhook fatura+geracao] erro:", err);
   }
 

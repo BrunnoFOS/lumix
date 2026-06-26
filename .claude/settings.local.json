@@ -63,7 +63,15 @@
       "Bash(xargs ls:*)",
       "Bash(xargs wc:*)",
       "Bash(find:*)",
-      "mcp__supabase-lumix__get_logs"
+      "mcp__supabase-lumix__get_logs",
+      "Bash(ls:*)",
+      "Bash(dir:*)",
+      "Bash(Remove-Item -Recurse -Force \"C:\\\\Users\\\\brunn\\\\lumix-projeto\\\\.next\" -ErrorAction SilentlyContinue)",
+      "Bash(Write-Output \"Cleared .next directory\")",
+      "Bash(taskkill:*)",
+      "Bash(gh issue view:*)",
+      "Bash(del \"C:\\\\Users\\\\brunn\\\\lumix-projeto\\\\middleware.ts\")",
+      "Bash(git diff:*)"
     ]
   }
 }

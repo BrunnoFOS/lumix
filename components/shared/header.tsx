@@ -8,6 +8,7 @@ import {
   History,
   Zap,
   Upload,
+  Building2,
   LogOut,
   Sun,
   Menu,
@@ -24,9 +25,10 @@ import { logout } from "@/lib/actions/auth";
 
 const navItems = [
   { label: "Dashboard", href: "/cliente/dashboard", icon: LayoutDashboard },
-  { label: "Histórico", href: "/cliente/historico", icon: History },
+  { label: "Historico", href: "/cliente/historico", icon: History },
   { label: "Usina", href: "/cliente/usina", icon: Zap },
   { label: "Fatura", href: "/cliente/fatura", icon: Upload },
+  { label: "Minha Empresa", href: "/cliente/perfil", icon: Building2 },
 ];
 
 export function ClienteHeader() {

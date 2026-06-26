@@ -2,11 +2,14 @@
 
 import { createServerClient } from "@/lib/supabase/server";
 
-export async function getDadosGeracaoCliente(empresaIds: string | string[]) {
+/**
+ * Busca IDs de UCs ativas de uma lista de empresas.
+ * Centraliza a query que antes era repetida em cada função.
+ */
+export async function getUCIdsCliente(empresaIds: string | string[]): Promise<string[]> {
   const supabase = await createServerClient();
   const ids = Array.isArray(empresaIds) ? empresaIds : [empresaIds];
 
-  // Buscar UCs de todas as empresas acessíveis
   const { data: ucs } = await supabase
     .from("unidades_consumidoras")
     .select("id")
@@ -14,13 +17,20 @@ export async function getDadosGeracaoCliente(empresaIds: string | string[]) {
     .eq("ativa", true);
 
   if (!ucs || ucs.length === 0) return [];
+  return ucs.map((uc) => uc.id);
+}
 
-  const ucIds = ucs.map((uc) => uc.id);
+export async function getDadosGeracaoCliente(empresaIds: string | string[], ucIds?: string[]) {
+  const supabase = await createServerClient();
+
+  // Usa ucIds se fornecido, senão busca
+  const resolvedUcIds = ucIds ?? await getUCIdsCliente(empresaIds);
+  if (resolvedUcIds.length === 0) return [];
 
   const { data, error } = await supabase
     .from("dados_geracao")
     .select("id, uc_id, mes_referencia, geracao_kwh, geracao_estimada_kwh, irradiacao_media, performance_ratio, indice_performance")
-    .in("uc_id", ucIds)
+    .in("uc_id", resolvedUcIds)
     .order("mes_referencia", { ascending: false });
 
   if (error) return [];
@@ -49,40 +59,53 @@ export async function getDadosGeracaoUC(ucId: string, meses?: number) {
   return data;
 }
 
-export async function getResumoGeracaoCliente(empresaIds: string | string[], mesReferencia?: string) {
+export async function getResumoGeracaoCliente(empresaIds: string | string[], mesReferencia?: string, ucIds?: string[]) {
   const supabase = await createServerClient();
   const ids = Array.isArray(empresaIds) ? empresaIds : [empresaIds];
 
-  // Se não especificado, usar mês atual
+  // Se nao especificado, usar mes atual
   const mes = mesReferencia || (() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
   })();
 
-  // Buscar UCs de todas as empresas
-  const { data: ucs } = await supabase
-    .from("unidades_consumidoras")
-    .select("id, codigo_uc, empresa_id, geracao_estimada_mensal_kwh")
-    .in("empresa_id", ids)
-    .eq("ativa", true);
+  // Usa ucIds se fornecido, senao busca UCs com dados extras necessarios
+  let ucs: { id: string; codigo_uc: string; empresa_id: string; geracao_estimada_mensal_kwh: number | null }[];
 
-  if (!ucs || ucs.length === 0) {
+  if (ucIds) {
+    // Buscar dados extras das UCs ja conhecidas
+    const { data } = await supabase
+      .from("unidades_consumidoras")
+      .select("id, codigo_uc, empresa_id, geracao_estimada_mensal_kwh")
+      .in("id", ucIds)
+      .eq("ativa", true);
+    ucs = data ?? [];
+  } else {
+    const { data } = await supabase
+      .from("unidades_consumidoras")
+      .select("id, codigo_uc, empresa_id, geracao_estimada_mensal_kwh")
+      .in("empresa_id", ids)
+      .eq("ativa", true);
+    ucs = data ?? [];
+  }
+
+  if (ucs.length === 0) {
     return { geracao_total: 0, estimada_total: 0, economia_total: 0, performance: null, ucs: [] };
   }
 
-  const ucIds = ucs.map((uc) => uc.id);
+  const resolvedUcIds = ucs.map((uc) => uc.id);
 
-  // Buscar dados de geração e faturas em paralelo
+  // Buscar dados de geracao e faturas em paralelo
   const [{ data: geracoes }, { data: faturas }] = await Promise.all([
     supabase
       .from("dados_geracao")
       .select("uc_id, geracao_kwh, geracao_estimada_kwh, performance_ratio, indice_performance")
-      .in("uc_id", ucIds)
+      .in("uc_id", resolvedUcIds)
       .eq("mes_referencia", mes),
     supabase
       .from("faturas")
       .select("uc_id, economia_estimada")
-      .in("uc_id", ucIds)
+      .in("uc_id", resolvedUcIds)
       .eq("mes_referencia", mes),
   ]);
 
@@ -90,7 +113,7 @@ export async function getResumoGeracaoCliente(empresaIds: string | string[], mes
   const estimada_total = geracoes?.reduce((sum, g) => sum + (g.geracao_estimada_kwh || 0), 0) ?? 0;
   const economia_total = faturas?.reduce((sum, f) => sum + (f.economia_estimada || 0), 0) ?? 0;
 
-  // Performance média
+  // Performance media
   const ratios = geracoes?.filter((g) => g.performance_ratio !== null).map((g) => g.performance_ratio!) ?? [];
   const avgRatio = ratios.length > 0 ? ratios.reduce((a, b) => a + b, 0) / ratios.length : null;
 
@@ -124,17 +147,93 @@ export async function getResumoGeracaoCliente(empresaIds: string | string[], mes
   };
 }
 
+export async function getEconomiaCliente(empresaIds: string | string[], ucIds?: string[]) {
+  const supabase = await createServerClient();
+
+  // Usa ucIds se fornecido, senao busca
+  const resolvedUcIds = ucIds ?? await getUCIdsCliente(empresaIds);
+  if (resolvedUcIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("faturas")
+    .select("uc_id, mes_referencia, economia_estimada")
+    .in("uc_id", resolvedUcIds)
+    .not("economia_estimada", "is", null)
+    .order("mes_referencia", { ascending: false });
+
+  if (error) return [];
+  return data;
+}
+
 export async function getUCsCliente(empresaIds: string | string[]) {
   const supabase = await createServerClient();
   const ids = Array.isArray(empresaIds) ? empresaIds : [empresaIds];
 
   const { data, error } = await supabase
     .from("unidades_consumidoras")
-    .select("id, codigo_uc, titular, endereco, cidade, estado, distribuidora, enquadramento_tarifario, modalidade_tarifaria, potencia_instalada_kwp, quantidade_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, geracao_estimada_mensal_kwh, ativa, observacoes")
+    .select("id, codigo_uc, titular, endereco, cidade, estado, distribuidora, enquadramento_tarifario, modalidade_tarifaria, potencia_instalada_kwp, quantidade_modulos, modelo_modulos, potencia_modulo_w, quantidade_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, geracao_estimada_mensal_kwh, ativa, observacoes")
     .in("empresa_id", ids)
     .eq("ativa", true)
     .order("codigo_uc");
 
   if (error) return [];
   return data;
+}
+
+export interface InversorDetalhe {
+  id: string;
+  sn: string;
+  model: string;
+  product_model: string;
+  power_kw: number;
+  state: number; // 1=Online, 2=Offline, 3=Alarme
+}
+
+export interface UCInversores {
+  uc_id: string;
+  inversores: InversorDetalhe[];
+  synced_at: string | null;
+  provider: string;
+}
+
+export async function getInversoresCliente(ucIds: string[]): Promise<UCInversores[]> {
+  if (ucIds.length === 0) return [];
+
+  const supabase = await createServerClient();
+
+  // Buscar stations vinculadas as UCs
+  const { data: stations } = await supabase
+    .from("uc_stations")
+    .select("uc_id, station_id, provider")
+    .in("uc_id", ucIds);
+
+  if (!stations || stations.length === 0) return [];
+
+  const stationIds = stations.map((s) => s.station_id);
+
+  // Buscar cache com inversores_detalhe
+  const { data: cache } = await supabase
+    .from("usinas_cache")
+    .select("station_id, inversores_detalhe, synced_at")
+    .in("station_id", stationIds);
+
+  if (!cache) return [];
+
+  const cacheMap = new Map(cache.map((c) => [c.station_id, c]));
+
+  const result: UCInversores[] = [];
+
+  for (const station of stations) {
+    const cached = cacheMap.get(station.station_id);
+    if (cached) {
+      result.push({
+        uc_id: station.uc_id,
+        inversores: (cached.inversores_detalhe as InversorDetalhe[]) || [],
+        synced_at: cached.synced_at,
+        provider: station.provider,
+      });
+    }
+  }
+
+  return result;
 }

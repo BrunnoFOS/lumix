@@ -42,11 +42,6 @@ export async function proxy(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // API cron: protegido por CRON_SECRET, não por auth
-  if (pathname.startsWith("/api/cron")) {
-    return NextResponse.next();
-  }
-
   // Rotas protegidas: verificar autenticação
   const { user, supabaseResponse } = await updateSession(request);
 

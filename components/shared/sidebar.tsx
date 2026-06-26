@@ -8,7 +8,6 @@ import {
   Building2,
   Zap,
   FileText,
-  FileSearch,
   Receipt,
   DollarSign,
   Bell,
@@ -34,7 +33,6 @@ const navItems = [
   { label: "Unidades", href: "/admin/unidades", icon: Zap },
   { label: "Relatórios", href: "/admin/relatorios", icon: FileText },
   { label: "Faturas", href: "/admin/faturas", icon: Receipt },
-  { label: "Rel. Fatura", href: "/admin/faturas-processadas", icon: FileSearch },
   { label: "Tarifas", href: "/admin/tarifas", icon: DollarSign },
   { label: "Alertas", href: "/admin/alertas", icon: Bell },
 ];

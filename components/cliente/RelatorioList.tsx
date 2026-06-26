@@ -1,13 +1,21 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatCurrency, formatKWh, formatMesReferencia } from "@/lib/utils";
 import { PerformanceIndicator } from "@/components/cliente/PerformanceIndicator";
-import { FileText, Download, Search } from "lucide-react";
+import { FileText, Download, Search, Filter } from "lucide-react";
 
 interface Relatorio {
   id: string;
@@ -17,12 +25,39 @@ interface Relatorio {
   geracao_estimada_kwh: number | null;
   economia_reais: number | null;
   indice_performance: string | null;
+  tipo_relatorio: string | null;
   pdf_url: string | null;
   uc: { id: string; codigo_uc: string } | null;
 }
 
-export function RelatorioList({ relatorios }: { relatorios: Relatorio[] }) {
+interface UCOption {
+  value: string;
+  label: string;
+}
+
+interface RelatorioListProps {
+  relatorios: Relatorio[];
+  ucOptions?: UCOption[];
+}
+
+export function RelatorioList({ relatorios, ucOptions = [] }: RelatorioListProps) {
   const [busca, setBusca] = useState("");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const selectedUC = searchParams.get("uc") || "";
+  const mesInicio = searchParams.get("inicio") || "";
+  const mesFim = searchParams.get("fim") || "";
+
+  function updateParam(key: string, value: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) {
+      params.set(key, value);
+    } else {
+      params.delete(key);
+    }
+    router.push(`/cliente/historico?${params.toString()}`);
+  }
 
   const relatoriosFiltrados = useMemo(() => {
     if (!busca.trim()) return relatorios;
@@ -36,15 +71,15 @@ export function RelatorioList({ relatorios }: { relatorios: Relatorio[] }) {
     );
   }, [relatorios, busca]);
 
-  if (relatorios.length === 0) {
+  if (relatorios.length === 0 && !selectedUC && !mesInicio && !mesFim) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <FileText className="h-12 w-12 text-muted-foreground/40" />
         <h3 className="mt-4 text-lg font-medium text-foreground">
-          Nenhum relatório disponível
+          Nenhum relatorio disponivel
         </h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Os relatórios aparecerão aqui assim que forem gerados pela equipe Lumix.
+          Os relatorios aparecerao aqui assim que forem gerados pela equipe Lumix.
         </p>
       </div>
     );
@@ -52,23 +87,65 @@ export function RelatorioList({ relatorios }: { relatorios: Relatorio[] }) {
 
   return (
     <div className="space-y-3">
+      {/* Filtros */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        {ucOptions.length > 1 && (
+          <Select
+            value={selectedUC || "todas"}
+            onValueChange={(value) => updateParam("uc", value === "todas" ? "" : value ?? "")}
+          >
+            <SelectTrigger className="w-full sm:w-48">
+              <Filter className="mr-2 h-4 w-4 text-muted-foreground" />
+              <SelectValue placeholder="Todas as UCs" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todas">Todas as UCs</SelectItem>
+              {ucOptions.map((uc) => (
+                <SelectItem key={uc.value} value={uc.value}>
+                  {uc.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <div className="flex gap-2">
+          <Input
+            type="month"
+            value={mesInicio}
+            onChange={(e) => updateParam("inicio", e.target.value)}
+            className="w-full sm:w-40"
+            placeholder="De"
+          />
+          <Input
+            type="month"
+            value={mesFim}
+            onChange={(e) => updateParam("fim", e.target.value)}
+            className="w-full sm:w-40"
+            placeholder="Ate"
+          />
+        </div>
+      </div>
+
+      {/* Busca textual */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Buscar por título, UC, mês ou performance..."
+          placeholder="Buscar por titulo, UC, mes ou performance..."
           className="pl-9"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
         />
       </div>
+
       {relatoriosFiltrados.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <Search className="h-8 w-8 text-muted-foreground/40" />
           <p className="mt-2 text-sm text-muted-foreground">
-            Nenhum relatório encontrado para &quot;{busca}&quot;
+            Nenhum relatorio encontrado
           </p>
         </div>
       ) : null}
+
       {relatoriosFiltrados.map((rel) => (
         <Card key={rel.id}>
           <CardContent className="flex items-center justify-between p-4">
@@ -77,9 +154,23 @@ export function RelatorioList({ relatorios }: { relatorios: Relatorio[] }) {
                 <FileText className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="font-medium text-foreground capitalize">
-                  {formatMesReferencia(rel.mes_referencia)}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-foreground capitalize">
+                    {formatMesReferencia(rel.mes_referencia)}
+                  </p>
+                  {rel.tipo_relatorio && (
+                    <Badge
+                      variant="outline"
+                      className={
+                        rel.tipo_relatorio === "real"
+                          ? "border-green-200 bg-green-50 text-green-700"
+                          : "border-amber-200 bg-amber-50 text-amber-700"
+                      }
+                    >
+                      {rel.tipo_relatorio === "real" ? "Real" : "Estimado"}
+                    </Badge>
+                  )}
+                </div>
                 {rel.uc && (
                   <p className="text-sm text-muted-foreground">
                     UC {rel.uc.codigo_uc}
@@ -90,7 +181,7 @@ export function RelatorioList({ relatorios }: { relatorios: Relatorio[] }) {
 
             <div className="hidden items-center gap-6 sm:flex">
               <div className="text-right">
-                <p className="text-xs text-muted-foreground">Geração</p>
+                <p className="text-xs text-muted-foreground">Geracao</p>
                 <p className="text-sm font-medium">
                   {rel.geracao_kwh !== null ? formatKWh(rel.geracao_kwh) : "—"}
                 </p>
