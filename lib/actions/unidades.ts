@@ -591,6 +591,28 @@ export async function vincularStationAUC(
 }
 
 // Buscar todos os station_ids vinculados a uma UC
+export async function getCidadesGHI(uf: string): Promise<string[]> {
+  if (!uf || uf.length !== 2) return [];
+
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("ghi_municipios")
+    .select("nome")
+    .eq("uf", uf.toUpperCase())
+    .order("nome");
+
+  if (error || !data) return [];
+
+  // Capitalizar cada palavra para exibição (tabela armazena lowercase sem acentos)
+  return data.map((row) =>
+    row.nome
+      .split(" ")
+      .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ")
+  );
+}
+
 export async function getUCStations(ucId: string) {
   const supabase = await createServerClient();
 

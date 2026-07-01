@@ -7,7 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Combobox } from "@/components/ui/combobox";
 import { updateUCLocalizacao } from "@/lib/actions/unidades";
+import { useCidadesGHI } from "@/hooks/use-cidades-ghi";
+
+const ESTADOS = [
+  "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG",
+  "PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO",
+];
 
 interface Props {
   ucId: string;
@@ -24,6 +31,8 @@ export function UCEndereco({ ucId, initial }: Props) {
   const [endereco, setEndereco] = useState(initial.endereco ?? "");
   const [cidade, setCidade] = useState(initial.cidade ?? "");
   const [estado, setEstado] = useState(initial.estado ?? "");
+
+  const { cidades, loading: cidadesLoading } = useCidadesGHI(estado);
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -107,30 +116,37 @@ export function UCEndereco({ ucId, initial }: Props) {
             />
           </div>
 
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="cidade">Cidade</Label>
-            <Input
-              id="cidade"
-              placeholder="Ex: Natal"
-              value={cidade}
-              onChange={(e) => {
-                setCidade(e.target.value);
+          <div className="space-y-2">
+            <Label htmlFor="estado">UF</Label>
+            <Combobox
+              options={ESTADOS}
+              value={estado}
+              onChange={(v) => {
+                setEstado(v);
+                setCidade("");
                 setSaved(false);
               }}
+              placeholder="UF"
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="estado">UF</Label>
-            <Input
-              id="estado"
-              placeholder="Ex: RN"
-              maxLength={2}
-              value={estado}
-              onChange={(e) => {
-                setEstado(e.target.value.toUpperCase());
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="cidade">Cidade</Label>
+            <Combobox
+              options={cidades}
+              value={cidade}
+              onChange={(v) => {
+                setCidade(v);
                 setSaved(false);
               }}
+              disabled={!estado || cidadesLoading}
+              placeholder={
+                !estado
+                  ? "Selecione a UF primeiro"
+                  : cidadesLoading
+                    ? "Carregando cidades..."
+                    : "Buscar cidade..."
+              }
             />
           </div>
         </div>
