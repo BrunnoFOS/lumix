@@ -71,7 +71,9 @@
       "Bash(taskkill:*)",
       "Bash(gh issue view:*)",
       "Bash(del \"C:\\\\Users\\\\brunn\\\\lumix-projeto\\\\middleware.ts\")",
-      "Bash(git diff:*)"
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(copy \"C:\\\\Users\\\\brunn\\\\Downloads\\\\Logo Lumix PNG \\(2\\) \\(1\\).png\" \"C:\\\\Users\\\\brunn\\\\lumix-projeto\\\\public\\\\logo-lumix.png\")"
     ]
   }
 }

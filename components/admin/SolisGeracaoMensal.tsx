@@ -15,6 +15,8 @@ import {
   FileText,
   CheckCircle,
   Building2,
+  MapPin,
+  ExternalLink,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,9 +37,10 @@ import {
   Cell,
 } from "recharts";
 import { fetchGeracaoMensalConsolidada, gerarRelatorioSolis } from "@/lib/actions/solis";
-import type { SolisGeracaoMensal as GeracaoData } from "@/lib/actions/solis";
+import type { SolisGeracaoMensal as GeracaoData, GerarRelatorioResult } from "@/lib/actions/solis";
 import { calcularGeracaoEstimadaUC } from "@/lib/actions/geracao-estimada";
 import { classificarDesempenho } from "@/lib/geracao-estimada";
+import { updateUCLocalizacao } from "@/lib/actions/unidades";
 
 function formatKwh(v: number): string {
   return v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -74,6 +77,14 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
   const [gerando, setGerando] = useState(false);
   const [geradoOk, setGeradoOk] = useState(false);
   const [gerarError, setGerarError] = useState<string | null>(null);
+  const [gerarErrorType, setGerarErrorType] = useState<GerarRelatorioResult["errorType"]>(undefined);
+  const [gerarCamposFaltantes, setGerarCamposFaltantes] = useState<string[]>([]);
+  const [gerarErrorUcId, setGerarErrorUcId] = useState<string | null>(null);
+  const [showLocationEdit, setShowLocationEdit] = useState(false);
+  const [editCidade, setEditCidade] = useState("");
+  const [editEstado, setEditEstado] = useState("");
+  const [savingLocation, setSavingLocation] = useState(false);
+  const [locationSaved, setLocationSaved] = useState(false);
   const [prPercent, setPrPercent] = useState<number | null>(null);
   const [geracaoEstimada, setGeracaoEstimada] = useState<number | null>(null);
   const [comentario, setComentario] = useState("");
@@ -146,6 +157,11 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
     if (!data || !selectedUc || !month) return;
     setGerando(true);
     setGerarError(null);
+    setGerarErrorType(undefined);
+    setGerarCamposFaltantes([]);
+    setGerarErrorUcId(null);
+    setShowLocationEdit(false);
+    setLocationSaved(false);
 
     // Usa o primeiro station_id como referência
     const primaryStation = selectedUc.stations[0]?.station_id;
@@ -159,10 +175,31 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
 
     if (result.error) {
       setGerarError(result.error);
+      setGerarErrorType(result.errorType);
+      setGerarCamposFaltantes(result.camposFaltantes ?? []);
+      setGerarErrorUcId(result.ucId ?? null);
     } else {
       setGeradoOk(true);
     }
     setGerando(false);
+  }
+
+  async function handleSaveLocation() {
+    if (!gerarErrorUcId || !editCidade.trim() || !editEstado.trim()) return;
+    setSavingLocation(true);
+
+    const result = await updateUCLocalizacao(gerarErrorUcId, {
+      cidade: editCidade.trim(),
+      estado: editEstado.trim().toUpperCase(),
+    });
+
+    if (result.error) {
+      setGerarError(result.error);
+    } else {
+      setLocationSaved(true);
+      setShowLocationEdit(false);
+    }
+    setSavingLocation(false);
   }
 
   const chartData = data?.dias.map((d) => ({
@@ -555,10 +592,111 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
                 )}
               </Button>
             )}
-            {gerarError && (
-              <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-                <AlertCircle className="h-4 w-4 text-red-500" />
-                <p className="text-sm text-red-600">{gerarError}</p>
+            {gerarError && !locationSaved && (
+              <div className="w-full space-y-3">
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-red-700">
+                        {gerarErrorType === "estimativa"
+                          ? "Não foi possível calcular a geração estimada"
+                          : gerarErrorType === "tarifa"
+                            ? "Classificação tarifária incompleta"
+                            : "Erro ao gerar relatório"}
+                      </p>
+                      {gerarCamposFaltantes.length > 0 && (
+                        <div>
+                          <p className="text-xs text-red-600 mb-1">Campos faltantes:</p>
+                          <ul className="list-disc pl-5 text-sm text-red-600 space-y-0.5">
+                            {gerarCamposFaltantes.map((campo) => (
+                              <li key={campo}>{campo}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {gerarCamposFaltantes.length === 0 && (
+                        <p className="text-sm text-red-600">{gerarError}</p>
+                      )}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {gerarCamposFaltantes.some(
+                          (c) => c === "Cidade" || c === "Estado"
+                        ) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-red-300 text-red-700 hover:bg-red-100"
+                            onClick={() => setShowLocationEdit(true)}
+                          >
+                            <MapPin className="mr-1.5 h-3.5 w-3.5" />
+                            Preencher cidade/estado
+                          </Button>
+                        )}
+                        {gerarErrorUcId && (
+                          <a
+                            href={`/admin/unidades/${gerarErrorUcId}`}
+                            className="inline-flex items-center gap-1 text-sm text-red-600 underline hover:text-red-800"
+                          >
+                            Editar UC completa
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {showLocationEdit && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-sm font-medium text-amber-800 mb-3">
+                      Preencher localização da UC
+                    </p>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-amber-700">Cidade</Label>
+                        <Input
+                          value={editCidade}
+                          onChange={(e) => setEditCidade(e.target.value)}
+                          placeholder="Ex: São Paulo"
+                          className="w-48 border-amber-300"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-amber-700">Estado (UF)</Label>
+                        <Input
+                          value={editEstado}
+                          onChange={(e) => setEditEstado(e.target.value.slice(0, 2))}
+                          placeholder="Ex: SP"
+                          maxLength={2}
+                          className="w-24 border-amber-300"
+                        />
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={handleSaveLocation}
+                        disabled={savingLocation || !editCidade.trim() || !editEstado.trim()}
+                      >
+                        {savingLocation ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        Salvar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {locationSaved && (
+              <div className="w-full rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-emerald-600" />
+                  <p className="text-sm font-medium text-emerald-700">
+                    Localização atualizada com sucesso! Clique em &quot;Gerar Relatório&quot; para tentar novamente.
+                  </p>
+                </div>
               </div>
             )}
           </div>

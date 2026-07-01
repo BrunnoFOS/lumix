@@ -5,6 +5,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UCClassificacaoTarifaria } from "@/components/admin/UCClassificacaoTarifaria";
+import { UCEndereco } from "@/components/admin/UCEndereco";
 import { UCParametrosEstimativa } from "@/components/admin/UCParametrosEstimativa";
 import { getUC } from "@/lib/actions/unidades";
 import { getOpcoesTarifarias } from "@/lib/actions/tarifas-aneel";
@@ -86,17 +87,14 @@ export default async function UCDetalhesPage({ params }: Props) {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Endereço</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <DetailRow label="Endereço" value={uc.endereco} />
-            <DetailRow label="Cidade/UF" value={
-              uc.cidade || uc.estado ? [uc.cidade, uc.estado].filter(Boolean).join("/") : null
-            } />
-          </CardContent>
-        </Card>
+        <UCEndereco
+          ucId={id}
+          initial={{
+            endereco: uc.endereco ?? null,
+            cidade: uc.cidade ?? null,
+            estado: uc.estado ?? null,
+          }}
+        />
       </div>
 
       <UCClassificacaoTarifaria

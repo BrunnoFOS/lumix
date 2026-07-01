@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
@@ -12,7 +13,6 @@ import {
   DollarSign,
   Bell,
   LogOut,
-  Sun,
   Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -58,9 +58,8 @@ function SidebarContent({
 
   return (
     <>
-      <div className="flex items-center gap-2 border-b border-border px-6 py-5">
-        <Sun className="h-6 w-6 text-primary" />
-        <span className="text-lg font-bold text-foreground">Lumix</span>
+      <div className="flex items-center gap-2 border-b border-border px-6 py-4">
+        <Image src="/logo-lumix.png" alt="Lumix" width={120} height={40} />
         <span className="ml-auto rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
           Admin
         </span>
@@ -143,8 +142,7 @@ export function AdminSidebar() {
             </div>
           </SheetContent>
         </Sheet>
-        <Sun className="h-5 w-5 text-primary" />
-        <span className="text-base font-bold text-foreground">Lumix</span>
+        <Image src="/logo-lumix.png" alt="Lumix" width={100} height={33} />
         <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
           Admin
         </span>

@@ -493,13 +493,21 @@ export async function fetchGeracaoMensalConsolidada(
 
 // ——— Gerar relatório via n8n ———
 
+export interface GerarRelatorioResult {
+  error?: string;
+  success?: boolean;
+  errorType?: "tarifa" | "estimativa" | "generic";
+  camposFaltantes?: string[];
+  ucId?: string;
+}
+
 // Gerar relatório consolidado (múltiplos provedores)
 export async function gerarRelatorioConsolidado(
   stations: { station_id: string; provider: "solis" | "sungrow" }[],
   month: string,
   dadosGeracao: SolisGeracaoMensal,
   comentarioAdmin?: string | null
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<GerarRelatorioResult> {
   // Usa o primeiro station_id como referência principal e envia dados já consolidados
   const primaryStationId = stations[0]?.station_id;
   if (!primaryStationId) return { error: "Nenhum station_id informado." };
@@ -512,7 +520,7 @@ export async function gerarRelatorioSolis(
   month: string,
   dadosGeracao: SolisGeracaoMensal,
   comentarioAdmin?: string | null
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<GerarRelatorioResult> {
   const user = process.env.N8N_API_USER;
   const password = process.env.N8N_API_PASSWORD;
 
@@ -637,6 +645,9 @@ export async function gerarRelatorioSolis(
       if (!validacao.valid) {
         return {
           error: `Classificação tarifária incompleta na UC. Campos faltantes: ${validacao.camposFaltantes.join(", ")}. Acesse a aba de classificação tarifária da UC para preencher.`,
+          errorType: "tarifa",
+          camposFaltantes: validacao.camposFaltantes,
+          ucId,
         };
       }
 
@@ -722,6 +733,27 @@ export async function gerarRelatorioSolis(
     // Calcular estimativa e PR
     const resultado = await calcularGeracaoEstimadaUC(ucId, mesRef, geracaoReal);
 
+    if ("error" in resultado) {
+      // Buscar campos faltantes para exibição no frontend
+      const { data: ucParaValidar } = await supabase
+        .from("unidades_consumidoras")
+        .select("potencia_instalada_kwp, cidade, estado, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, data_instalacao")
+        .eq("id", ucId)
+        .single();
+
+      const { validarUCParaEstimativa } = await import("@/lib/geracao-estimada");
+      const validacaoEst = ucParaValidar
+        ? validarUCParaEstimativa(ucParaValidar)
+        : null;
+
+      return {
+        error: resultado.error,
+        errorType: "estimativa",
+        camposFaltantes: validacaoEst && !validacaoEst.valid ? validacaoEst.camposFaltantes : [],
+        ucId,
+      };
+    }
+
     if ("data" in resultado) {
       const pr = resultado.data.pr_percent ?? null;
       const classificacao = pr != null ? classificarDesempenho(pr) : null;
@@ -791,6 +823,8 @@ export async function gerarRelatorioSolis(
     if (!res.ok) {
       return {
         error: `Erro ao gerar relatório (${res.status}). Verifique se a UC possui cadastro completo (concessionária, subgrupo e modalidade tarifária configurados).`,
+        errorType: "generic",
+        ucId,
       };
     }
 

@@ -245,6 +245,32 @@ export async function updateParametrosEstimativa(
   return {};
 }
 
+export async function updateUCLocalizacao(
+  id: string,
+  dados: {
+    cidade: string;
+    estado: string;
+    endereco?: string | null;
+  }
+): Promise<ActionResult> {
+  const supabase = await createServerClient();
+
+  const { error } = await supabase
+    .from("unidades_consumidoras")
+    .update(dados)
+    .eq("id", id);
+
+  if (error) {
+    return { error: "Erro ao atualizar localização da UC." };
+  }
+
+  revalidatePath("/admin/unidades");
+  revalidatePath(`/admin/unidades/${id}`);
+  revalidatePath("/admin/relatorios");
+  revalidatePath("/admin/dashboard");
+  return {};
+}
+
 export async function desvincularUC(id: string): Promise<ActionResult> {
   const supabase = await createServerClient();
 

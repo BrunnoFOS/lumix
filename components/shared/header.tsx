@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
@@ -10,7 +11,6 @@ import {
   Upload,
   Building2,
   LogOut,
-  Sun,
   Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -47,9 +47,8 @@ export function ClienteHeader() {
             <SheetContent side="left" className="w-64 p-0">
               <SheetTitle className="sr-only">Menu de navegação</SheetTitle>
               <div className="flex h-full flex-col">
-                <div className="flex items-center gap-2 border-b border-border px-6 py-5">
-                  <Sun className="h-6 w-6 text-primary" />
-                  <span className="text-lg font-bold text-foreground">Lumix</span>
+                <div className="flex items-center gap-2 border-b border-border px-6 py-4">
+                  <Image src="/logo-lumix.png" alt="Lumix" width={120} height={40} />
                 </div>
                 <nav className="flex-1 space-y-1 px-3 py-4">
                   {navItems.map((item) => {
@@ -88,9 +87,8 @@ export function ClienteHeader() {
             </SheetContent>
           </Sheet>
 
-          <Link href="/cliente/dashboard" className="flex items-center gap-2">
-            <Sun className="h-6 w-6 text-primary" />
-            <span className="text-lg font-bold text-foreground">Lumix</span>
+          <Link href="/cliente/dashboard" className="flex items-center">
+            <Image src="/logo-lumix.png" alt="Lumix" width={120} height={40} />
           </Link>
 
           {/* Desktop nav */}
