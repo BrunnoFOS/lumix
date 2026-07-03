@@ -16,16 +16,17 @@ interface Props {
 
 export default async function ClienteDetalhesPage({ params }: Props) {
   const { id } = await params;
-  const result = await getEmpresaComRelacionamentos(id);
 
-  if (!result) notFound();
-
-  const { ucs, ...empresa } = result;
-  const [usuarios, solisUCs, sungrowUCs] = await Promise.all([
+  const [result, usuarios, solisUCs, sungrowUCs] = await Promise.all([
+    getEmpresaComRelacionamentos(id),
     getUsuariosEmpresa(id),
     fetchSolisUCs(),
     fetchSungrowUCs(),
   ]);
+
+  if (!result) notFound();
+
+  const { ucs, ...empresa } = result;
 
   // Combinar usinas de ambos os provedores com tag de provider
   const stationIdsVinculados = new Set(

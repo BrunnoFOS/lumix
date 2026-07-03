@@ -172,7 +172,7 @@ export async function getRelatorios(search?: string, statusEnvio?: string, empre
 
   let query = supabase
     .from("relatorios")
-    .select("id, uc_id, empresa_id, mes_referencia, titulo, geracao_kwh, geracao_estimada_kwh, economia_reais, indice_performance, status_envio, gerado_por, tipo_relatorio, pdf_url, arquivado, created_at, uc:unidades_consumidoras(id, codigo_uc), empresa:empresas(id, nome)")
+    .select("id, uc_id, empresa_id, mes_referencia, titulo, geracao_kwh, geracao_estimada_kwh, economia_reais, indice_performance, status_envio, gerado_por, tipo_relatorio, pdf_url, inicio_ciclo, fim_ciclo, arquivado, created_at, uc:unidades_consumidoras(id, codigo_uc), empresa:empresas(id, nome)")
     .eq("arquivado", false)
     .order("mes_referencia", { ascending: false });
 
@@ -217,7 +217,7 @@ export async function getRelatorio(id: string) {
 
   const { data, error } = await supabase
     .from("relatorios")
-    .select("id, uc_id, empresa_id, mes_referencia, titulo, pdf_url, geracao_kwh, geracao_estimada_kwh, economia_reais, indice_performance, status_envio, gerado_por, tipo_relatorio, fatura_id, arquivado, created_at, updated_at, uc:unidades_consumidoras(id, codigo_uc, titular), empresa:empresas(id, nome)")
+    .select("id, uc_id, empresa_id, mes_referencia, titulo, pdf_url, geracao_kwh, geracao_estimada_kwh, economia_reais, indice_performance, status_envio, gerado_por, tipo_relatorio, fatura_id, inicio_ciclo, fim_ciclo, arquivado, created_at, updated_at, uc:unidades_consumidoras(id, codigo_uc, titular), empresa:empresas(id, nome)")
     .eq("id", id)
     .single();
 
@@ -237,7 +237,7 @@ export async function getRelatoriosCliente(empresaIds: string | string[], filtro
 
   let query = supabase
     .from("relatorios")
-    .select("id, mes_referencia, titulo, geracao_kwh, geracao_estimada_kwh, economia_reais, indice_performance, status_envio, tipo_relatorio, pdf_url, uc:unidades_consumidoras(id, codigo_uc)")
+    .select("id, mes_referencia, titulo, geracao_kwh, geracao_estimada_kwh, economia_reais, indice_performance, status_envio, tipo_relatorio, pdf_url, inicio_ciclo, fim_ciclo, created_at, uc:unidades_consumidoras(id, codigo_uc)")
     .in("empresa_id", ids)
     .eq("status_envio", "enviado")
     .order("mes_referencia", { ascending: false });
@@ -273,6 +273,8 @@ export async function criarRelatorioComAnexo(formData: FormData): Promise<Action
   const mes_referencia = formData.get("mes_referencia") as string;
   const pdf_url = (formData.get("pdf_url") as string) || null;
   const comentarioAdmin = (formData.get("comentario_admin") as string) || null;
+  const inicio_ciclo = (formData.get("inicio_ciclo") as string) || null;
+  const fim_ciclo = (formData.get("fim_ciclo") as string) || null;
 
   if (!uc_id || !empresa_id || !mes_referencia) {
     return { error: "UC, empresa e mês de referência são obrigatórios." };
@@ -312,6 +314,8 @@ export async function criarRelatorioComAnexo(formData: FormData): Promise<Action
       titulo: `Relatório ${mesNome} - ${uc.codigo_uc}`,
       pdf_url,
       geracao_estimada_kwh,
+      inicio_ciclo,
+      fim_ciclo,
       status_envio: "pendente",
       gerado_por: "manual",
       tipo_relatorio: "real",
@@ -329,7 +333,7 @@ export async function criarRelatorioComAnexo(formData: FormData): Promise<Action
 
   if (n8nUser && n8nPassword) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000);
+    const timeout = setTimeout(() => controller.abort(), 15000); // 15s — relatório já criado no banco
 
     try {
       const credentials = Buffer.from(`${n8nUser}:${n8nPassword}`).toString("base64");
@@ -347,6 +351,8 @@ export async function criarRelatorioComAnexo(formData: FormData): Promise<Action
             uc_id,
             empresa_id,
             mes_referencia,
+            inicio_ciclo,
+            fim_ciclo,
             arquivo_url: pdf_url,
             codigo_uc: uc.codigo_uc,
             geracao_estimada_kwh,

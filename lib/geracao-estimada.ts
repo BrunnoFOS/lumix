@@ -180,6 +180,7 @@ export interface UCParaEstimativa {
   degradacao_ano_zero: number | null;
   degradacao_anos_seguintes: number | null;
   data_instalacao: string | null;
+  data_inicio_degradacao: string | null;
 }
 
 /**
@@ -196,7 +197,8 @@ export function validarUCParaEstimativa(
   if (uc.fator_rendimento == null) faltantes.push("Fator de rendimento");
   if (uc.degradacao_ano_zero == null) faltantes.push("Degradação ano zero");
   if (uc.degradacao_anos_seguintes == null) faltantes.push("Degradação anos seguintes");
-  if (!uc.data_instalacao) faltantes.push("Data de instalação");
+  if (!uc.data_inicio_degradacao && !uc.data_instalacao)
+    faltantes.push("Data início degradação (ou Data de instalação)");
 
   if (faltantes.length > 0) return { valid: false, camposFaltantes: faltantes };
   return { valid: true };

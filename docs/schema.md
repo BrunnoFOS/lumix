@@ -110,6 +110,7 @@ Unidades consumidoras (UCs) com dados técnicos do sistema fotovoltaico.
 | fator_rendimento | decimal(5,4) | nullable | Fator de rendimento da instalação (ex: 0.95). Perdas específicas (sombreamento, orientação, cabeamento) |
 | degradacao_ano_zero | decimal(5,4) | nullable | Degradação no primeiro ano (ex: 0.02 para 2%) |
 | degradacao_anos_seguintes | decimal(5,4) | nullable | Degradação anual recorrente a partir do segundo ano (ex: 0.006 para 0,6%) |
+| data_inicio_degradacao | date | nullable | Data a partir da qual a degradação começa a ser contada. Preenchida pelo admin. Fallback: data_instalacao |
 | contrato_acl_rs_mwh | decimal(10,2) | nullable | Preço negociado do contrato ACL em R$/MWh. Apenas para UCs com grupo_tarifario = 'acl'. Converter para R$/kWh dividindo por 1000 |
 | ativa | boolean | NOT NULL, default true | Se a UC está ativa |
 | arquivada | boolean | NOT NULL, default false | Se a UC está arquivada |
@@ -223,6 +224,8 @@ Relatórios gerados por UC e período.
 | status_envio | text | NOT NULL, check in ('pendente','enviado','erro'), default 'pendente' | Status do envio ao cliente |
 | gerado_por | text | NOT NULL, check in ('automatico','manual'), default 'manual' | Forma de geração |
 | fatura_id | uuid | FK → faturas.id, nullable | Fatura usada como base |
+| inicio_ciclo | date | nullable | Início do ciclo de faturamento/medição |
+| fim_ciclo | date | nullable | Fim do ciclo de faturamento/medição |
 | arquivado | boolean | NOT NULL, default false | Se o relatório está arquivado |
 | created_at | timestamptz | NOT NULL, default now() | |
 | updated_at | timestamptz | NOT NULL, default now() | |

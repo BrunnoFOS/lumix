@@ -144,6 +144,8 @@ export interface Relatorio {
   status_envio: StatusEnvio;
   gerado_por: GeradoPor;
   fatura_id: string | null;
+  inicio_ciclo: string | null;
+  fim_ciclo: string | null;
   created_at: string;
   updated_at: string;
 }

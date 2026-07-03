@@ -227,6 +227,7 @@ export async function updateParametrosEstimativa(
     fator_rendimento: number | null;
     degradacao_ano_zero: number | null;
     degradacao_anos_seguintes: number | null;
+    data_inicio_degradacao: string | null;
   }
 ): Promise<ActionResult> {
   const supabase = await createServerClient();
@@ -340,7 +341,7 @@ export async function getUCs(search?: string, empresaId?: string, status?: strin
 
   let query = supabase
     .from("unidades_consumidoras")
-    .select("id, codigo_uc, titular, distribuidora, potencia_instalada_kwp, cidade, estado, ativa, arquivada, empresa_id, enquadramento_tarifario, modalidade_tarifaria, quantidade_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, geracao_estimada_mensal_kwh, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, station_id, observacoes, grupo_tarifario, subgrupo, concessionaria_sigla, modalidade_tarifaria_aneel, empresa:empresas(id, nome)")
+    .select("id, codigo_uc, titular, distribuidora, potencia_instalada_kwp, cidade, estado, ativa, arquivada, empresa_id, modelo_inversores, data_instalacao, geracao_estimada_mensal_kwh, station_id, grupo_tarifario, subgrupo, concessionaria_sigla, modalidade_tarifaria_aneel, empresa:empresas(id, nome)")
     .order("codigo_uc");
 
   if (status === "ativas") {

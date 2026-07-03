@@ -15,12 +15,16 @@ interface Props {
     fator_rendimento: number | null;
     degradacao_ano_zero: number | null;
     degradacao_anos_seguintes: number | null;
+    data_inicio_degradacao: string | null;
   };
 }
 
 export function UCParametrosEstimativa({ ucId, initial }: Props) {
   const router = useRouter();
 
+  const [dataInicioDegradacao, setDataInicioDegradacao] = useState(
+    initial.data_inicio_degradacao ?? ""
+  );
   const [fatorRendimento, setFatorRendimento] = useState(
     initial.fator_rendimento?.toString() ?? ""
   );
@@ -36,6 +40,7 @@ export function UCParametrosEstimativa({ ucId, initial }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const hasChanges =
+    dataInicioDegradacao !== (initial.data_inicio_degradacao ?? "") ||
     fatorRendimento !== (initial.fator_rendimento?.toString() ?? "") ||
     degradacaoAnoZero !== (initial.degradacao_ano_zero?.toString() ?? "") ||
     degradacaoAnosSeguintes !==
@@ -48,6 +53,7 @@ export function UCParametrosEstimativa({ ucId, initial }: Props) {
     setError(null);
 
     const result = await updateParametrosEstimativa(ucId, {
+      data_inicio_degradacao: dataInicioDegradacao || null,
       fator_rendimento: fatorRendimento ? parseFloat(fatorRendimento) : null,
       degradacao_ano_zero: degradacaoAnoZero
         ? parseFloat(degradacaoAnoZero)
@@ -106,7 +112,23 @@ export function UCParametrosEstimativa({ ucId, initial }: Props) {
           </div>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-2">
+            <Label htmlFor="data_inicio_degradacao">Data início degradação</Label>
+            <Input
+              id="data_inicio_degradacao"
+              type="date"
+              value={dataInicioDegradacao}
+              onChange={(e) => {
+                setDataInicioDegradacao(e.target.value);
+                setSaved(false);
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Início da contagem de degradação
+            </p>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="fator_rendimento">Fator de rendimento</Label>
             <Input

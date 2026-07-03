@@ -106,10 +106,16 @@ export function GerarRelatorioForm({
 
     const formData = new FormData(e.currentTarget);
     const ucId = formData.get("uc_id") as string;
-    const mesInput = formData.get("mes_input") as string;
+    const inicioCiclo = formData.get("inicio_ciclo") as string;
+    const fimCiclo = formData.get("fim_ciclo") as string;
 
-    if (!ucId || !mesInput) {
-      setError("Selecione a UC e o mês de referência.");
+    if (!ucId || !inicioCiclo || !fimCiclo) {
+      setError("Selecione a UC e preencha início e fim do ciclo.");
+      return;
+    }
+
+    if (fimCiclo <= inicioCiclo) {
+      setError("O fim do ciclo deve ser posterior ao início.");
       return;
     }
 
@@ -117,6 +123,11 @@ export function GerarRelatorioForm({
       setError("Anexe a fatura antes de continuar.");
       return;
     }
+
+    // Derivar mes_referencia do fim_ciclo (primeiro dia do mês do fim)
+    const fimDate = new Date(fimCiclo + "T00:00:00");
+    const mesReferencia = `${fimDate.getFullYear()}-${String(fimDate.getMonth() + 1).padStart(2, "0")}-01`;
+    const mesLabel = `${fimDate.getFullYear()}-${String(fimDate.getMonth() + 1).padStart(2, "0")}`;
 
     setSubmitting(true);
 
@@ -131,10 +142,9 @@ export function GerarRelatorioForm({
       }
 
       // Upload para Supabase Storage
-      const isPdf = file.type === "application/pdf";
       const supabase = createClient();
       const ext = file.name.split(".").pop();
-      const fileName = `relatorios/${empresaId}/${ucId}/${mesInput}.${ext}`;
+      const fileName = `relatorios/${empresaId}/${ucId}/${mesLabel}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
         .from("faturas")
@@ -154,13 +164,10 @@ export function GerarRelatorioForm({
       const submitData = new FormData();
       submitData.set("uc_id", ucId);
       submitData.set("empresa_id", empresaId);
-      submitData.set("mes_referencia", `${mesInput}-01`);
-      if (isPdf) {
-        submitData.set("pdf_url", urlData.publicUrl);
-      } else {
-        submitData.set("pdf_url", urlData.publicUrl);
-      }
-
+      submitData.set("mes_referencia", mesReferencia);
+      submitData.set("inicio_ciclo", inicioCiclo);
+      submitData.set("fim_ciclo", fimCiclo);
+      submitData.set("pdf_url", urlData.publicUrl);
       submitData.set("comentario_admin", comentario || "");
 
       const result = await criarRelatorioComAnexo(submitData);
@@ -205,8 +212,12 @@ export function GerarRelatorioForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="mes_input">Mês de referência *</Label>
-              <Input id="mes_input" name="mes_input" type="month" required />
+              <Label htmlFor="inicio_ciclo">Início do ciclo *</Label>
+              <Input id="inicio_ciclo" name="inicio_ciclo" type="date" required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fim_ciclo">Fim do ciclo *</Label>
+              <Input id="fim_ciclo" name="fim_ciclo" type="date" required />
             </div>
           </CardContent>
         </Card>

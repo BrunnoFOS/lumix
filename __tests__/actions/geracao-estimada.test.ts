@@ -218,6 +218,7 @@ describe("validarUCParaEstimativa", () => {
     degradacao_ano_zero: 0.02,
     degradacao_anos_seguintes: 0.006,
     data_instalacao: "2024-01-15",
+    data_inicio_degradacao: null as string | null,
   };
 
   it("retorna valid true quando todos os campos preenchidos", () => {
@@ -246,8 +247,29 @@ describe("validarUCParaEstimativa", () => {
     if (!result.valid) {
       expect(result.camposFaltantes).toHaveLength(3);
       expect(result.camposFaltantes).toContain("Cidade");
-      expect(result.camposFaltantes).toContain("Data de instalação");
+      expect(result.camposFaltantes).toContain("Data início degradação (ou Data de instalação)");
       expect(result.camposFaltantes).toContain("Degradação ano zero");
+    }
+  });
+
+  it("aceita UC com data_inicio_degradacao preenchido e data_instalacao null", () => {
+    const result = validarUCParaEstimativa({
+      ...ucCompleta,
+      data_instalacao: null,
+      data_inicio_degradacao: "2024-06-01",
+    });
+    expect(result).toEqual({ valid: true });
+  });
+
+  it("lista campo faltante quando ambas as datas são null", () => {
+    const result = validarUCParaEstimativa({
+      ...ucCompleta,
+      data_instalacao: null,
+      data_inicio_degradacao: null,
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.camposFaltantes).toContain("Data início degradação (ou Data de instalação)");
     }
   });
 
@@ -260,6 +282,7 @@ describe("validarUCParaEstimativa", () => {
       degradacao_ano_zero: null,
       degradacao_anos_seguintes: null,
       data_instalacao: null,
+      data_inicio_degradacao: null,
     });
     expect(result.valid).toBe(false);
     if (!result.valid) {

@@ -115,6 +115,7 @@ export default async function UCDetalhesPage({ params }: Props) {
       <UCParametrosEstimativa
         ucId={id}
         initial={{
+          data_inicio_degradacao: uc.data_inicio_degradacao ?? null,
           fator_rendimento: uc.fator_rendimento ?? null,
           degradacao_ano_zero: uc.degradacao_ano_zero ?? null,
           degradacao_anos_seguintes: uc.degradacao_anos_seguintes ?? null,

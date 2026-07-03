@@ -41,7 +41,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatCurrency, formatKWh, formatMesReferencia } from "@/lib/utils";
+import { formatCurrency, formatKWh, formatMesReferencia, formatDateTime, formatDate } from "@/lib/utils";
 import {
   updateRelatorioStatus,
   arquivarRelatorio,
@@ -62,6 +62,9 @@ interface RelatorioRow {
   gerado_por: string;
   tipo_relatorio: string;
   pdf_url: string | null;
+  inicio_ciclo: string | null;
+  fim_ciclo: string | null;
+  created_at: string;
   uc: { id: string; codigo_uc: string } | null;
   empresa: { id: string; nome: string } | null;
 }
@@ -178,19 +181,25 @@ export function RelatorioTable({
         "Cliente",
         "UC",
         "Mês ref.",
+        "Início ciclo",
+        "Fim ciclo",
         "Geração kWh",
         "Economia R$",
         "Performance",
         "Status",
+        "Gerado em",
       ],
       relatorios.map((r) => [
         r.empresa?.nome,
         r.uc?.codigo_uc,
         r.mes_referencia,
+        r.inicio_ciclo || "",
+        r.fim_ciclo || "",
         r.geracao_kwh,
         r.economia_reais,
         r.indice_performance,
         r.status_envio,
+        r.created_at ? formatDateTime(r.created_at) : "",
       ])
     );
   }
@@ -222,10 +231,12 @@ export function RelatorioTable({
               <TableHead>UC</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead>Mês ref.</TableHead>
+              <TableHead>Período</TableHead>
               <TableHead className="text-right">Geração</TableHead>
               <TableHead className="text-right">Economia</TableHead>
               <TableHead>Performance</TableHead>
               <TableHead>Envio</TableHead>
+              <TableHead>Gerado em</TableHead>
               <TableHead className="w-12" />
             </TableRow>
           </TableHeader>
@@ -253,6 +264,11 @@ export function RelatorioTable({
                   </TableCell>
                   <TableCell className="capitalize">
                     {formatMesReferencia(rel.mes_referencia)}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                    {rel.inicio_ciclo && rel.fim_ciclo
+                      ? `${formatDate(rel.inicio_ciclo)} a ${formatDate(rel.fim_ciclo)}`
+                      : "—"}
                   </TableCell>
                   <TableCell className="text-right">
                     {rel.geracao_kwh !== null
@@ -301,6 +317,9 @@ export function RelatorioTable({
                     >
                       {STATUS_LABELS[rel.status_envio] || rel.status_envio}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {rel.created_at ? formatDateTime(rel.created_at) : "—"}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>

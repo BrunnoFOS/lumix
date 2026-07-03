@@ -32,6 +32,16 @@ export function formatDate(date: string): string {
   return new Intl.DateTimeFormat("pt-BR").format(new Date(date));
 }
 
+export function formatDateTime(date: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(date));
+}
+
 export function formatMesReferencia(date: string): string {
   const d = new Date(date + "T00:00:00");
   return new Intl.DateTimeFormat("pt-BR", {

@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RelatorioTable } from "@/components/admin/RelatorioTable";
@@ -28,6 +29,9 @@ interface RelatorioRow {
   gerado_por: string;
   tipo_relatorio: string;
   pdf_url: string | null;
+  inicio_ciclo: string | null;
+  fim_ciclo: string | null;
+  created_at: string;
   uc: { id: string; codigo_uc: string } | null;
   empresa: { id: string; nome: string } | null;
 }
@@ -46,7 +50,12 @@ export function RelatorioPageClient({
 
   const handleSuccess = useCallback(() => {
     setShowForm(false);
-    router.refresh();
+    toast.success("Relatório enviado para geração com sucesso!", {
+      description: "A página será atualizada em instantes.",
+    });
+    setTimeout(() => {
+      router.refresh();
+    }, 5000);
   }, [router]);
 
   const handleCancel = useCallback(() => {

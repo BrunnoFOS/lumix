@@ -60,7 +60,7 @@ export async function fetchSolisGeracaoMensal(
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000); // 30s
+  const timeout = setTimeout(() => controller.abort(), 15000); // 15s
 
   try {
     const credentials = Buffer.from(`${user}:${password}`).toString("base64");
@@ -306,7 +306,7 @@ export async function fetchSungrowGeracaoMensal(
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000); // 30s
+  const timeout = setTimeout(() => controller.abort(), 15000); // 15s
 
   try {
     const credentials = Buffer.from(`${user}:${password}`).toString("base64");
@@ -506,20 +506,24 @@ export async function gerarRelatorioConsolidado(
   stations: { station_id: string; provider: "solis" | "sungrow" }[],
   month: string,
   dadosGeracao: SolisGeracaoMensal,
-  comentarioAdmin?: string | null
+  comentarioAdmin?: string | null,
+  inicioCiclo?: string | null,
+  fimCiclo?: string | null
 ): Promise<GerarRelatorioResult> {
   // Usa o primeiro station_id como referência principal e envia dados já consolidados
   const primaryStationId = stations[0]?.station_id;
   if (!primaryStationId) return { error: "Nenhum station_id informado." };
 
-  return gerarRelatorioSolis(primaryStationId, month, dadosGeracao, comentarioAdmin);
+  return gerarRelatorioSolis(primaryStationId, month, dadosGeracao, comentarioAdmin, inicioCiclo, fimCiclo);
 }
 
 export async function gerarRelatorioSolis(
   stationId: string,
   month: string,
   dadosGeracao: SolisGeracaoMensal,
-  comentarioAdmin?: string | null
+  comentarioAdmin?: string | null,
+  inicioCiclo?: string | null,
+  fimCiclo?: string | null
 ): Promise<GerarRelatorioResult> {
   const user = process.env.N8N_API_USER;
   const password = process.env.N8N_API_PASSWORD;
@@ -737,7 +741,7 @@ export async function gerarRelatorioSolis(
       // Buscar campos faltantes para exibição no frontend
       const { data: ucParaValidar } = await supabase
         .from("unidades_consumidoras")
-        .select("potencia_instalada_kwp, cidade, estado, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, data_instalacao")
+        .select("potencia_instalada_kwp, cidade, estado, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, data_instalacao, data_inicio_degradacao")
         .eq("id", ucId)
         .single();
 
@@ -789,7 +793,7 @@ export async function gerarRelatorioSolis(
   }
 
   const relController = new AbortController();
-  const relTimeout = setTimeout(() => relController.abort(), 60000); // 60s para geração de relatório
+  const relTimeout = setTimeout(() => relController.abort(), 15000); // 15s — relatório já criado no banco
 
   try {
     const credentials = Buffer.from(`${user}:${password}`).toString("base64");
@@ -813,6 +817,8 @@ export async function gerarRelatorioSolis(
           impostos,
           economia,
           comentario_admin: comentarioAdmin || null,
+          inicio_ciclo: inicioCiclo || null,
+          fim_ciclo: fimCiclo || null,
         }),
         signal: relController.signal,
       }

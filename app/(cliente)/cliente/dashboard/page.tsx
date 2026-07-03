@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { getCurrentProfile } from "@/lib/actions/profile";
 import { getUCIdsCliente, getResumoGeracaoCliente, getDadosGeracaoCliente, getEconomiaCliente } from "@/lib/actions/dados-geracao";
 import { DashboardCards } from "@/components/cliente/DashboardCards";
-import { GeracaoChart } from "@/components/cliente/GeracaoChart";
-import { EconomiaChart } from "@/components/cliente/EconomiaChart";
+import { GeracaoChartLazy } from "@/components/cliente/GeracaoChartLazy";
+import { EconomiaChartLazy } from "@/components/cliente/EconomiaChartLazy";
 import { DashboardPeriodFilter } from "@/components/cliente/DashboardPeriodFilter";
 
 interface Props {
@@ -91,9 +91,9 @@ export default async function ClienteDashboardPage({ searchParams }: Props) {
         performanceRatio={resumo.performance_ratio ?? null}
       />
 
-      <GeracaoChart dados={chartData} />
+      <GeracaoChartLazy dados={chartData} />
 
-      <EconomiaChart dados={economiaData} />
+      <EconomiaChartLazy dados={economiaData} />
     </div>
   );
 }

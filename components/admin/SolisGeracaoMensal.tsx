@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   Sun,
   TrendingUp,
@@ -25,17 +27,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Combobox } from "@/components/ui/combobox";
 import { Badge } from "@/components/ui/badge";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-  Cell,
-} from "recharts";
+import dynamic from "next/dynamic";
+import { Skeleton } from "@/components/ui/skeleton";
+const SolisGeracaoChart = dynamic(
+  () => import("@/components/admin/SolisGeracaoChart").then((mod) => ({ default: mod.SolisGeracaoChart })),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-80 w-full" />,
+  }
+);
+
 import { fetchGeracaoMensalConsolidada, gerarRelatorioSolis } from "@/lib/actions/solis";
 import type { SolisGeracaoMensal as GeracaoData, GerarRelatorioResult } from "@/lib/actions/solis";
 import { calcularGeracaoEstimadaUC } from "@/lib/actions/geracao-estimada";
@@ -65,6 +66,7 @@ interface Props {
 }
 
 export function SolisGeracaoMensal({ empresas, ucs }: Props) {
+  const router = useRouter();
   const now = new Date();
   const mesAtual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
@@ -88,6 +90,8 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
   const [prPercent, setPrPercent] = useState<number | null>(null);
   const [geracaoEstimada, setGeracaoEstimada] = useState<number | null>(null);
   const [comentario, setComentario] = useState("");
+  const [inicioCiclo, setInicioCiclo] = useState("");
+  const [fimCiclo, setFimCiclo] = useState("");
 
   // Filtrar UCs pela empresa selecionada
   const ucsFiltradas = useMemo(
@@ -131,6 +135,8 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
     setPrPercent(null);
     setGeracaoEstimada(null);
     setComentario("");
+    setInicioCiclo("");
+    setFimCiclo("");
 
     const result = await fetchGeracaoMensalConsolidada(selectedUc.stations, month);
 
@@ -138,6 +144,12 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
       setError(result.error);
     } else {
       setData(result.data);
+
+      // Auto-preencher ciclo com período da API
+      if (result.data?.periodo) {
+        setInicioCiclo(result.data.periodo.data_inicio || "");
+        setFimCiclo(result.data.periodo.data_fim || "");
+      }
 
       // Calcular PR% real usando geração estimada da UC
       if (result.data) {
@@ -155,6 +167,16 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
 
   async function handleGerarRelatorio() {
     if (!data || !selectedUc || !month) return;
+
+    if (!inicioCiclo || !fimCiclo) {
+      setGerarError("Preencha o início e fim do ciclo de medição.");
+      return;
+    }
+    if (fimCiclo <= inicioCiclo) {
+      setGerarError("O fim do ciclo deve ser posterior ao início.");
+      return;
+    }
+
     setGerando(true);
     setGerarError(null);
     setGerarErrorType(undefined);
@@ -171,7 +193,7 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
       return;
     }
 
-    const result = await gerarRelatorioSolis(primaryStation, month, data, comentario || null);
+    const result = await gerarRelatorioSolis(primaryStation, month, data, comentario || null, inicioCiclo, fimCiclo);
 
     if (result.error) {
       setGerarError(result.error);
@@ -180,6 +202,12 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
       setGerarErrorUcId(result.ucId ?? null);
     } else {
       setGeradoOk(true);
+      toast.success("Relatório enviado para geração com sucesso!", {
+        description: "A página será atualizada em instantes.",
+      });
+      setTimeout(() => {
+        router.refresh();
+      }, 5000);
     }
     setGerando(false);
   }
@@ -472,57 +500,9 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
               <CardTitle className="text-base">Geração diária (kWh)</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                    <XAxis
-                      dataKey="dia"
-                      tick={{ fontSize: 11, fill: "#6B7280" }}
-                      tickLine={false}
-                      axisLine={{ stroke: "#E5E7EB" }}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 11, fill: "#6B7280" }}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(v) => `${v}`}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: 8,
-                        border: "1px solid #E5E7EB",
-                        fontSize: 13,
-                      }}
-                      formatter={(value, name) => {
-                        if (name === "kwh") return [`${formatKwh(Number(value))} kWh`, "Geração"];
-                        return [String(value), String(name)];
-                      }}
-                      labelFormatter={(label) => `Dia ${label}`}
-                    />
-                    <ReferenceLine
-                      y={mediaDiaria}
-                      stroke="#F97316"
-                      strokeDasharray="6 3"
-                      strokeWidth={1.5}
-                      label={{
-                        value: `Média: ${formatKwh(mediaDiaria)}`,
-                        position: "insideTopRight",
-                        fill: "#F97316",
-                        fontSize: 11,
-                      }}
-                    />
-                    <Bar dataKey="kwh" radius={[4, 4, 0, 0]} maxBarSize={28}>
-                      {chartData?.map((entry, i) => (
-                        <Cell
-                          key={i}
-                          fill={entry.pr < 1 ? "#EF4444" : entry.pr >= 2 ? "#10B981" : "#F59E0B"}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              {chartData && (
+                <SolisGeracaoChart chartData={chartData} mediaDiaria={mediaDiaria} />
+              )}
               <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-500" />
@@ -541,6 +521,40 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
                   Média diária
                 </span>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Ciclo de medição */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Ciclo de medição</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap items-end gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="inicio_ciclo">Início do ciclo *</Label>
+                  <Input
+                    id="inicio_ciclo"
+                    type="date"
+                    value={inicioCiclo}
+                    onChange={(e) => setInicioCiclo(e.target.value)}
+                    className="w-44"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="fim_ciclo">Fim do ciclo *</Label>
+                  <Input
+                    id="fim_ciclo"
+                    type="date"
+                    value={fimCiclo}
+                    onChange={(e) => setFimCiclo(e.target.value)}
+                    className="w-44"
+                  />
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Pré-preenchido com o período da API. Ajuste conforme o ciclo real de faturamento.
+              </p>
             </CardContent>
           </Card>
 

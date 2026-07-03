@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useState, useCallback } from "react";
+import { useActionState, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Loader2, Zap, Activity, TrendingUp, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -105,9 +106,16 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
     null
   );
 
+  const hasRedirected = useRef(false);
   useEffect(() => {
-    if (state?.data?.id) {
-      router.push("/admin/faturas");
+    if (state?.data?.id && !hasRedirected.current) {
+      hasRedirected.current = true;
+      toast.success("Fatura enviada para processamento com sucesso!", {
+        description: "Redirecionando para a lista de faturas...",
+      });
+      setTimeout(() => {
+        router.push("/admin/faturas");
+      }, 5000);
     }
   }, [state, router]);
 

@@ -77,7 +77,7 @@ export async function calcularGeracaoEstimadaUC(
   const { data: uc, error: ucError } = await supabase
     .from("unidades_consumidoras")
     .select(
-      "potencia_instalada_kwp, cidade, estado, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, data_instalacao"
+      "potencia_instalada_kwp, cidade, estado, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, data_instalacao, data_inicio_degradacao"
     )
     .eq("id", ucId)
     .single();
@@ -109,7 +109,7 @@ export async function calcularGeracaoEstimadaUC(
 
   // Calcular degradação
   const degradacao = calcularDegradacaoAcumulada({
-    dataInstalacao: uc.data_instalacao!,
+    dataInstalacao: uc.data_inicio_degradacao ?? uc.data_instalacao!,
     mesReferencia,
     degradacaoAnoZero: Number(uc.degradacao_ano_zero),
     degradacaoAnosSeguintes: Number(uc.degradacao_anos_seguintes),
