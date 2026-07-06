@@ -224,8 +224,6 @@ Relatórios gerados por UC e período.
 | status_envio | text | NOT NULL, check in ('pendente','enviado','erro'), default 'pendente' | Status do envio ao cliente |
 | gerado_por | text | NOT NULL, check in ('automatico','manual'), default 'manual' | Forma de geração |
 | fatura_id | uuid | FK → faturas.id, nullable | Fatura usada como base |
-| inicio_ciclo | date | nullable | Início do ciclo de faturamento/medição |
-| fim_ciclo | date | nullable | Fim do ciclo de faturamento/medição |
 | arquivado | boolean | NOT NULL, default false | Se o relatório está arquivado |
 | created_at | timestamptz | NOT NULL, default now() | |
 | updated_at | timestamptz | NOT NULL, default now() | |

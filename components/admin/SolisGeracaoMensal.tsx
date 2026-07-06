@@ -90,8 +90,6 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
   const [prPercent, setPrPercent] = useState<number | null>(null);
   const [geracaoEstimada, setGeracaoEstimada] = useState<number | null>(null);
   const [comentario, setComentario] = useState("");
-  const [inicioCiclo, setInicioCiclo] = useState("");
-  const [fimCiclo, setFimCiclo] = useState("");
 
   // Filtrar UCs pela empresa selecionada
   const ucsFiltradas = useMemo(
@@ -135,8 +133,6 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
     setPrPercent(null);
     setGeracaoEstimada(null);
     setComentario("");
-    setInicioCiclo("");
-    setFimCiclo("");
 
     const result = await fetchGeracaoMensalConsolidada(selectedUc.stations, month);
 
@@ -144,12 +140,6 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
       setError(result.error);
     } else {
       setData(result.data);
-
-      // Auto-preencher ciclo com período da API
-      if (result.data?.periodo) {
-        setInicioCiclo(result.data.periodo.data_inicio || "");
-        setFimCiclo(result.data.periodo.data_fim || "");
-      }
 
       // Calcular PR% real usando geração estimada da UC
       if (result.data) {
@@ -168,15 +158,6 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
   async function handleGerarRelatorio() {
     if (!data || !selectedUc || !month) return;
 
-    if (!inicioCiclo || !fimCiclo) {
-      setGerarError("Preencha o início e fim do ciclo de medição.");
-      return;
-    }
-    if (fimCiclo <= inicioCiclo) {
-      setGerarError("O fim do ciclo deve ser posterior ao início.");
-      return;
-    }
-
     setGerando(true);
     setGerarError(null);
     setGerarErrorType(undefined);
@@ -193,7 +174,7 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
       return;
     }
 
-    const result = await gerarRelatorioSolis(primaryStation, month, data, comentario || null, inicioCiclo, fimCiclo);
+    const result = await gerarRelatorioSolis(primaryStation, month, data, comentario || null);
 
     if (result.error) {
       setGerarError(result.error);
@@ -521,40 +502,6 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
                   Média diária
                 </span>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Ciclo de medição */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Ciclo de medição</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap items-end gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="inicio_ciclo">Início do ciclo *</Label>
-                  <Input
-                    id="inicio_ciclo"
-                    type="date"
-                    value={inicioCiclo}
-                    onChange={(e) => setInicioCiclo(e.target.value)}
-                    className="w-44"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="fim_ciclo">Fim do ciclo *</Label>
-                  <Input
-                    id="fim_ciclo"
-                    type="date"
-                    value={fimCiclo}
-                    onChange={(e) => setFimCiclo(e.target.value)}
-                    className="w-44"
-                  />
-                </div>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Pré-preenchido com o período da API. Ajuste conforme o ciclo real de faturamento.
-              </p>
             </CardContent>
           </Card>
 

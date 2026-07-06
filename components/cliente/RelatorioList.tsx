@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency, formatKWh, formatMesReferencia, formatDateTime, formatDate } from "@/lib/utils";
+import { formatCurrency, formatKWh, formatMesReferencia, formatDateTime } from "@/lib/utils";
 import { PerformanceIndicator } from "@/components/cliente/PerformanceIndicator";
 import { FileText, Download, Search, Filter } from "lucide-react";
 
@@ -27,8 +27,6 @@ interface Relatorio {
   indice_performance: string | null;
   tipo_relatorio: string | null;
   pdf_url: string | null;
-  inicio_ciclo: string | null;
-  fim_ciclo: string | null;
   created_at: string;
   uc: { id: string; codigo_uc: string } | null;
 }
@@ -177,11 +175,6 @@ export function RelatorioList({ relatorios, ucOptions = [] }: RelatorioListProps
                 {rel.uc && (
                   <p className="text-sm text-muted-foreground">
                     UC {rel.uc.codigo_uc}
-                  </p>
-                )}
-                {rel.inicio_ciclo && rel.fim_ciclo && (
-                  <p className="text-xs text-muted-foreground">
-                    Periodo: {formatDate(rel.inicio_ciclo)} a {formatDate(rel.fim_ciclo)}
                   </p>
                 )}
                 {rel.created_at && (

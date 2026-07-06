@@ -506,24 +506,20 @@ export async function gerarRelatorioConsolidado(
   stations: { station_id: string; provider: "solis" | "sungrow" }[],
   month: string,
   dadosGeracao: SolisGeracaoMensal,
-  comentarioAdmin?: string | null,
-  inicioCiclo?: string | null,
-  fimCiclo?: string | null
+  comentarioAdmin?: string | null
 ): Promise<GerarRelatorioResult> {
   // Usa o primeiro station_id como referência principal e envia dados já consolidados
   const primaryStationId = stations[0]?.station_id;
   if (!primaryStationId) return { error: "Nenhum station_id informado." };
 
-  return gerarRelatorioSolis(primaryStationId, month, dadosGeracao, comentarioAdmin, inicioCiclo, fimCiclo);
+  return gerarRelatorioSolis(primaryStationId, month, dadosGeracao, comentarioAdmin);
 }
 
 export async function gerarRelatorioSolis(
   stationId: string,
   month: string,
   dadosGeracao: SolisGeracaoMensal,
-  comentarioAdmin?: string | null,
-  inicioCiclo?: string | null,
-  fimCiclo?: string | null
+  comentarioAdmin?: string | null
 ): Promise<GerarRelatorioResult> {
   const user = process.env.N8N_API_USER;
   const password = process.env.N8N_API_PASSWORD;
@@ -817,8 +813,6 @@ export async function gerarRelatorioSolis(
           impostos,
           economia,
           comentario_admin: comentarioAdmin || null,
-          inicio_ciclo: inicioCiclo || null,
-          fim_ciclo: fimCiclo || null,
         }),
         signal: relController.signal,
       }

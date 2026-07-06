@@ -106,16 +106,10 @@ export function GerarRelatorioForm({
 
     const formData = new FormData(e.currentTarget);
     const ucId = formData.get("uc_id") as string;
-    const inicioCiclo = formData.get("inicio_ciclo") as string;
-    const fimCiclo = formData.get("fim_ciclo") as string;
+    const mesInput = formData.get("mes_input") as string;
 
-    if (!ucId || !inicioCiclo || !fimCiclo) {
-      setError("Selecione a UC e preencha início e fim do ciclo.");
-      return;
-    }
-
-    if (fimCiclo <= inicioCiclo) {
-      setError("O fim do ciclo deve ser posterior ao início.");
+    if (!ucId || !mesInput) {
+      setError("Selecione a UC e o mês de referência.");
       return;
     }
 
@@ -124,10 +118,8 @@ export function GerarRelatorioForm({
       return;
     }
 
-    // Derivar mes_referencia do fim_ciclo (primeiro dia do mês do fim)
-    const fimDate = new Date(fimCiclo + "T00:00:00");
-    const mesReferencia = `${fimDate.getFullYear()}-${String(fimDate.getMonth() + 1).padStart(2, "0")}-01`;
-    const mesLabel = `${fimDate.getFullYear()}-${String(fimDate.getMonth() + 1).padStart(2, "0")}`;
+    const mesReferencia = `${mesInput}-01`;
+    const mesLabel = mesInput;
 
     setSubmitting(true);
 
@@ -165,8 +157,6 @@ export function GerarRelatorioForm({
       submitData.set("uc_id", ucId);
       submitData.set("empresa_id", empresaId);
       submitData.set("mes_referencia", mesReferencia);
-      submitData.set("inicio_ciclo", inicioCiclo);
-      submitData.set("fim_ciclo", fimCiclo);
       submitData.set("pdf_url", urlData.publicUrl);
       submitData.set("comentario_admin", comentario || "");
 
@@ -212,12 +202,8 @@ export function GerarRelatorioForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="inicio_ciclo">Início do ciclo *</Label>
-              <Input id="inicio_ciclo" name="inicio_ciclo" type="date" required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="fim_ciclo">Fim do ciclo *</Label>
-              <Input id="fim_ciclo" name="fim_ciclo" type="date" required />
+              <Label htmlFor="mes_input">Mês de referência *</Label>
+              <Input id="mes_input" name="mes_input" type="month" required />
             </div>
           </CardContent>
         </Card>

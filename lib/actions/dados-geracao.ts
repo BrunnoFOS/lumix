@@ -20,6 +20,21 @@ export async function getUCIdsCliente(empresaIds: string | string[]): Promise<st
   return ucs.map((uc) => uc.id);
 }
 
+/**
+ * Retorna o mes_referencia mais recente com dados de geracao para as UCs fornecidas.
+ */
+export async function getUltimoMesComDados(ucIds: string[]): Promise<string | undefined> {
+  if (ucIds.length === 0) return undefined;
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("dados_geracao")
+    .select("mes_referencia")
+    .in("uc_id", ucIds)
+    .order("mes_referencia", { ascending: false })
+    .limit(1);
+  return data?.[0]?.mes_referencia ?? undefined;
+}
+
 export async function getDadosGeracaoCliente(empresaIds: string | string[], ucIds?: string[]) {
   const supabase = await createServerClient();
 

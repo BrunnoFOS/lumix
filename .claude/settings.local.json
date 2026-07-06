@@ -74,7 +74,8 @@
       "Bash(git diff:*)",
       "Bash(git log:*)",
       "Bash(copy \"C:\\\\Users\\\\brunn\\\\Downloads\\\\Logo Lumix PNG \\(2\\) \\(1\\).png\" \"C:\\\\Users\\\\brunn\\\\lumix-projeto\\\\public\\\\logo-lumix.png\")",
-      "Bash(relatorios \")"
+      "Bash(relatorios \")",
+      "Bash(del \"C:\\\\Users\\\\brunn\\\\lumix-projeto\\\\supabase\\\\migrations\\\\20260703_add_ciclo_to_relatorios.sql\")"
     ]
   }
 }

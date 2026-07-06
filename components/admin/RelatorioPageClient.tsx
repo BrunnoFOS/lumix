@@ -29,8 +29,6 @@ interface RelatorioRow {
   gerado_por: string;
   tipo_relatorio: string;
   pdf_url: string | null;
-  inicio_ciclo: string | null;
-  fim_ciclo: string | null;
   created_at: string;
   uc: { id: string; codigo_uc: string } | null;
   empresa: { id: string; nome: string } | null;

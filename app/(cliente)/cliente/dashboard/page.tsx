@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentProfile } from "@/lib/actions/profile";
-import { getUCIdsCliente, getResumoGeracaoCliente, getDadosGeracaoCliente, getEconomiaCliente } from "@/lib/actions/dados-geracao";
+import { getUCIdsCliente, getUltimoMesComDados, getResumoGeracaoCliente, getDadosGeracaoCliente, getEconomiaCliente } from "@/lib/actions/dados-geracao";
 import { DashboardCards } from "@/components/cliente/DashboardCards";
 import { GeracaoChartLazy } from "@/components/cliente/GeracaoChartLazy";
 import { EconomiaChartLazy } from "@/components/cliente/EconomiaChartLazy";
@@ -25,8 +25,11 @@ export default async function ClienteDashboardPage({ searchParams }: Props) {
   // Buscar UCs uma unica vez, depois passar os IDs para as 3 queries
   const ucIds = await getUCIdsCliente(profile.empresa_id);
 
+  // Se nenhum mes foi selecionado, usar o ultimo mes com dados
+  const mesSelecionado = params.mes || await getUltimoMesComDados(ucIds);
+
   const [resumo, dadosGeracao, dadosEconomia] = await Promise.all([
-    getResumoGeracaoCliente(profile.empresa_id, params.mes, ucIds),
+    getResumoGeracaoCliente(profile.empresa_id, mesSelecionado, ucIds),
     getDadosGeracaoCliente(profile.empresa_id, ucIds),
     getEconomiaCliente(profile.empresa_id, ucIds),
   ]);
@@ -79,7 +82,7 @@ export default async function ClienteDashboardPage({ searchParams }: Props) {
           </p>
         </div>
         <Suspense>
-          <DashboardPeriodFilter />
+          <DashboardPeriodFilter defaultMes={mesSelecionado} />
         </Suspense>
       </div>
 
