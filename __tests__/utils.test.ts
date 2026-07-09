@@ -75,3 +75,4 @@ describe("getMesReferenciaDate", () => {
     expect(getMesReferenciaDate(2026, 0)).toBe("2026-01-01");
   });
 });
+

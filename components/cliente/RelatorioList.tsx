@@ -109,20 +109,19 @@ export function RelatorioList({ relatorios, ucOptions = [] }: RelatorioListProps
             </SelectContent>
           </Select>
         )}
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Input
-            type="month"
+            type="date"
             value={mesInicio}
             onChange={(e) => updateParam("inicio", e.target.value)}
             className="w-full sm:w-40"
-            placeholder="De"
           />
+          <span className="text-sm text-muted-foreground">a</span>
           <Input
-            type="month"
+            type="date"
             value={mesFim}
             onChange={(e) => updateParam("fim", e.target.value)}
             className="w-full sm:w-40"
-            placeholder="Ate"
           />
         </div>
       </div>

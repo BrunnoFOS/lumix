@@ -19,8 +19,8 @@ export default async function HistoricoPage({ searchParams }: Props) {
   }
 
   const ucId = params.uc || undefined;
-  const mesInicio = params.inicio ? `${params.inicio}-01` : undefined;
-  const mesFim = params.fim ? `${params.fim}-01` : undefined;
+  const mesInicio = params.inicio || undefined;
+  const mesFim = params.fim || undefined;
 
   const [relatorios, ucs] = await Promise.all([
     getRelatoriosCliente(profile.empresa_id, { ucId, mesInicio, mesFim }),

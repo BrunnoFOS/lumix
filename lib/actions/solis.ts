@@ -50,7 +50,9 @@ export interface SolisGeracaoMensal {
 
 export async function fetchSolisGeracaoMensal(
   stationId: string,
-  month: string
+  month: string,
+  dataInicio?: string,
+  dataFim?: string
 ): Promise<{ data: SolisGeracaoMensal | null; error?: string }> {
   const user = process.env.N8N_API_USER;
   const password = process.env.N8N_API_PASSWORD;
@@ -64,7 +66,10 @@ export async function fetchSolisGeracaoMensal(
 
   try {
     const credentials = Buffer.from(`${user}:${password}`).toString("base64");
-    const url = `https://n8n-n8n.nt4zcb.easypanel.host/webhook/solis-geracao-mensal?month=${month}&station_id=${stationId}`;
+    let url = `https://n8n-n8n.nt4zcb.easypanel.host/webhook/solis-geracao-mensal?month=${month}&station_id=${stationId}`;
+    if (dataInicio && dataFim) {
+      url += `&data_inicio=${dataInicio}&data_fim=${dataFim}`;
+    }
 
     const res = await fetch(url, {
       method: "POST",
@@ -296,7 +301,9 @@ function normalizeSungrowToGeracaoMensal(
 
 export async function fetchSungrowGeracaoMensal(
   stationId: string,
-  month: string
+  month: string,
+  dataInicio?: string,
+  dataFim?: string
 ): Promise<{ data: SolisGeracaoMensal | null; error?: string }> {
   const user = process.env.N8N_API_USER;
   const password = process.env.N8N_API_PASSWORD;
@@ -310,7 +317,10 @@ export async function fetchSungrowGeracaoMensal(
 
   try {
     const credentials = Buffer.from(`${user}:${password}`).toString("base64");
-    const url = `${WEBHOOK_GERACAO_SUNGROW}?month=${month}&station_id=${stationId}`;
+    let url = `${WEBHOOK_GERACAO_SUNGROW}?month=${month}&station_id=${stationId}`;
+    if (dataInicio && dataFim) {
+      url += `&data_inicio=${dataInicio}&data_fim=${dataFim}`;
+    }
 
     const res = await fetch(url, {
       method: "POST",
@@ -348,19 +358,23 @@ export async function fetchSungrowGeracaoMensal(
 export async function fetchGeracaoMensal(
   stationId: string,
   month: string,
-  provider: "solis" | "sungrow"
+  provider: "solis" | "sungrow",
+  dataInicio?: string,
+  dataFim?: string
 ): Promise<{ data: SolisGeracaoMensal | null; error?: string }> {
   if (provider === "sungrow") {
-    return fetchSungrowGeracaoMensal(stationId, month);
+    return fetchSungrowGeracaoMensal(stationId, month, dataInicio, dataFim);
   }
-  return fetchSolisGeracaoMensal(stationId, month);
+  return fetchSolisGeracaoMensal(stationId, month, dataInicio, dataFim);
 }
 
 // ——— Busca consolidada de múltiplos provedores ———
 
 export async function fetchGeracaoMensalConsolidada(
   stations: { station_id: string; provider: "solis" | "sungrow" }[],
-  month: string
+  month: string,
+  dataInicio?: string,
+  dataFim?: string
 ): Promise<{ data: SolisGeracaoMensal | null; error?: string }> {
   if (stations.length === 0) {
     return { data: null, error: "Nenhum station_id informado." };
@@ -368,12 +382,12 @@ export async function fetchGeracaoMensalConsolidada(
 
   // Caso simples: apenas um provedor
   if (stations.length === 1) {
-    return fetchGeracaoMensal(stations[0].station_id, month, stations[0].provider);
+    return fetchGeracaoMensal(stations[0].station_id, month, stations[0].provider, dataInicio, dataFim);
   }
 
   // Buscar dados de todos os provedores em paralelo
   const results = await Promise.all(
-    stations.map((s) => fetchGeracaoMensal(s.station_id, month, s.provider))
+    stations.map((s) => fetchGeracaoMensal(s.station_id, month, s.provider, dataInicio, dataFim))
   );
 
   // Filtrar os que retornaram dados
@@ -869,18 +883,20 @@ export async function getStationsSiblings(
 export async function fetchGeracaoMensalAuto(
   stationId: string,
   month: string,
-  provider: "solis" | "sungrow"
+  provider: "solis" | "sungrow",
+  dataInicio?: string,
+  dataFim?: string
 ): Promise<{ data: SolisGeracaoMensal | null; error?: string; isConsolidated?: boolean }> {
   // Verificar se este station tem "irmãos" na mesma UC
   const siblings = await getStationsSiblings(stationId);
 
   if (siblings.length <= 1) {
     // Sem consolidação necessária
-    return fetchGeracaoMensal(stationId, month, provider);
+    return fetchGeracaoMensal(stationId, month, provider, dataInicio, dataFim);
   }
 
   // Buscar consolidado
-  const result = await fetchGeracaoMensalConsolidada(siblings, month);
+  const result = await fetchGeracaoMensalConsolidada(siblings, month, dataInicio, dataFim);
   return { ...result, isConsolidated: true };
 }
 

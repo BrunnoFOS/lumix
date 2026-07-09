@@ -69,10 +69,15 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
   const router = useRouter();
   const now = new Date();
   const mesAtual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  // Default: primeiro e último dia do mês atual
+  const defaultInicio = `${mesAtual}-01`;
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const defaultFim = `${mesAtual}-${String(lastDay).padStart(2, "0")}`;
 
   const [empresaId, setEmpresaId] = useState("");
   const [ucId, setUcId] = useState("");
-  const [month, setMonth] = useState(mesAtual);
+  const [dataInicio, setDataInicio] = useState(defaultInicio);
+  const [dataFim, setDataFim] = useState(defaultFim);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<GeracaoData | null>(null);
@@ -123,8 +128,11 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
     setData(null);
   }
 
+  // Derivar month (YYYY-MM) a partir de dataFim para usar em APIs que ainda precisam
+  const month = dataFim ? dataFim.slice(0, 7) : mesAtual;
+
   async function handleBuscar() {
-    if (!selectedUc || !month) return;
+    if (!selectedUc || !dataInicio || !dataFim) return;
     setLoading(true);
     setError(null);
     setData(null);
@@ -134,7 +142,12 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
     setGeracaoEstimada(null);
     setComentario("");
 
-    const result = await fetchGeracaoMensalConsolidada(selectedUc.stations, month);
+    const result = await fetchGeracaoMensalConsolidada(
+      selectedUc.stations,
+      month,
+      dataInicio,
+      dataFim
+    );
 
     if (result.error) {
       setError(result.error);
@@ -253,15 +266,24 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
               />
             </div>
             <div className="space-y-2">
-              <Label>Mês</Label>
+              <Label>Data início</Label>
               <Input
-                type="month"
-                value={month}
-                onChange={(e) => setMonth(e.target.value)}
-                className="w-44"
+                type="date"
+                value={dataInicio}
+                onChange={(e) => setDataInicio(e.target.value)}
+                className="w-40"
               />
             </div>
-            <Button onClick={handleBuscar} disabled={loading || !ucId}>
+            <div className="space-y-2">
+              <Label>Data fim</Label>
+              <Input
+                type="date"
+                value={dataFim}
+                onChange={(e) => setDataFim(e.target.value)}
+                className="w-40"
+              />
+            </div>
+            <Button onClick={handleBuscar} disabled={loading || !ucId || !dataInicio || !dataFim}>
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

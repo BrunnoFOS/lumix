@@ -46,6 +46,8 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
   const [clienteId, setClienteId] = useState<string>("");
   const [ucId, setUcId] = useState<string>("");
   const [mes, setMes] = useState<string>("");
+  const [geracaoInicio, setGeracaoInicio] = useState<string>("");
+  const [geracaoFim, setGeracaoFim] = useState<string>("");
 
   // Dados de geração
   const [geracao, setGeracao] = useState<SolisGeracaoMensal | null>(null);
@@ -54,9 +56,19 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
 
   const selectedUC = ucs.find((u) => u.id === ucId);
 
-  // Buscar geração quando UC + mês mudarem
+  // Preencher datas padrão quando mês muda
+  useEffect(() => {
+    if (mes) {
+      const [y, m] = mes.split("-").map(Number);
+      const lastDay = new Date(y, m, 0).getDate();
+      setGeracaoInicio(`${mes}-01`);
+      setGeracaoFim(`${mes}-${String(lastDay).padStart(2, "0")}`);
+    }
+  }, [mes]);
+
+  // Buscar geração quando UC + período mudarem
   const buscarGeracao = useCallback(async () => {
-    if (!ucId || !mes) {
+    if (!ucId || !geracaoInicio || !geracaoFim) {
       setGeracao(null);
       return;
     }
@@ -71,11 +83,13 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
     setLoadingGeracao(true);
     setGeracaoError(null);
 
+    const month = geracaoFim.slice(0, 7);
+
     // Detectar provider pelo station_id (Solis tem IDs longos, SunGrow curtos)
     // Por enquanto tenta solis primeiro, fallback sungrow
-    let result = await fetchGeracaoMensal(uc.station_id, mes, "solis");
+    let result = await fetchGeracaoMensal(uc.station_id, month, "solis", geracaoInicio, geracaoFim);
     if (result.error || !result.data) {
-      result = await fetchGeracaoMensal(uc.station_id, mes, "sungrow");
+      result = await fetchGeracaoMensal(uc.station_id, month, "sungrow", geracaoInicio, geracaoFim);
     }
 
     if (result.error) {
@@ -85,7 +99,7 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
       setGeracao(result.data);
     }
     setLoadingGeracao(false);
-  }, [ucId, mes, ucs]);
+  }, [ucId, geracaoInicio, geracaoFim, ucs]);
 
   useEffect(() => {
     buscarGeracao();
@@ -190,6 +204,27 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
               </CardTitle>
             </CardHeader>
             <CardContent>
+              <div className="mb-4 grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="geracao_inicio">Data início</Label>
+                  <Input
+                    id="geracao_inicio"
+                    type="date"
+                    value={geracaoInicio}
+                    onChange={(e) => setGeracaoInicio(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="geracao_fim">Data fim</Label>
+                  <Input
+                    id="geracao_fim"
+                    type="date"
+                    value={geracaoFim}
+                    onChange={(e) => setGeracaoFim(e.target.value)}
+                  />
+                </div>
+              </div>
+
               {loadingGeracao ? (
                 <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
