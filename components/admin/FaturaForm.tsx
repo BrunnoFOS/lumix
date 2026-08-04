@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { FileUpload } from "@/components/shared/FileUpload";
 import { createFaturaComGeracao } from "@/lib/actions/faturas";
 import { fetchGeracaoMensal } from "@/lib/actions/solis";
+import { createClient } from "@/lib/supabase/client";
 import type { SolisGeracaoMensal } from "@/lib/actions/solis";
 
 interface UC {
@@ -32,17 +33,13 @@ interface Cliente {
   nome: string;
 }
 
-const selectClass =
-  "flex h-8 w-full items-center rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
-
 function formatKwh(v: number): string {
   return v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
 export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Cliente[] }) {
   const router = useRouter();
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const [imagemUrl, setImagemUrl] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [clienteId, setClienteId] = useState<string>("");
   const [ucId, setUcId] = useState<string>("");
   const [mes, setMes] = useState<string>("");
@@ -85,8 +82,6 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
 
     const month = geracaoFim.slice(0, 7);
 
-    // Detectar provider pelo station_id (Solis tem IDs longos, SunGrow curtos)
-    // Por enquanto tenta solis primeiro, fallback sungrow
     let result = await fetchGeracaoMensal(uc.station_id, month, "solis", geracaoInicio, geracaoFim);
     if (result.error || !result.data) {
       result = await fetchGeracaoMensal(uc.station_id, month, "sungrow", geracaoInicio, geracaoFim);
@@ -111,8 +106,37 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
       if (mesInput && !mesInput.endsWith("-01")) {
         formData.set("mes_referencia", `${mesInput}-01`);
       }
-      if (pdfUrl) formData.set("pdf_url", pdfUrl);
-      if (imagemUrl) formData.set("imagem_url", imagemUrl);
+
+      // Upload file to Storage if selected
+      if (selectedFile) {
+        try {
+          const supabase = createClient();
+          const ext = selectedFile.name.split(".").pop();
+          const fileName = `admin/${Date.now()}.${ext}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from("faturas")
+            .upload(fileName, selectedFile, { upsert: true });
+
+          if (uploadError) {
+            return { error: "Erro ao fazer upload do arquivo. Tente novamente." };
+          }
+
+          const { data: urlData } = supabase.storage
+            .from("faturas")
+            .getPublicUrl(fileName);
+
+          const isPdf = selectedFile.type === "application/pdf";
+          if (isPdf) {
+            formData.set("pdf_url", urlData.publicUrl);
+          } else {
+            formData.set("imagem_url", urlData.publicUrl);
+          }
+        } catch {
+          return { error: "Erro inesperado no upload do arquivo." };
+        }
+      }
+
       if (geracao) formData.set("dados_geracao", JSON.stringify(geracao));
       if (selectedUC?.station_id) formData.set("station_id", selectedUC.station_id);
       return await createFaturaComGeracao(formData);
@@ -289,18 +313,8 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
           </CardHeader>
           <CardContent>
             <FileUpload
-              bucket="faturas"
-              path={`admin/${Date.now()}`}
               label="Arraste o PDF ou imagem da fatura"
-              onUpload={(url, isPdf) => {
-                if (isPdf) {
-                  setPdfUrl(url);
-                  setImagemUrl(null);
-                } else {
-                  setImagemUrl(url);
-                  setPdfUrl(null);
-                }
-              }}
+              onFileSelect={setSelectedFile}
             />
           </CardContent>
         </Card>

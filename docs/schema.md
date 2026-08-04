@@ -455,6 +455,31 @@ Tarifas importadas do BI da ANEEL. Registros nunca são sobrescritos — cada im
 
 ---
 
+### `faturas_processadas_log`
+
+Log de auditoria para edições em faturas processadas. Registros são imutáveis — sem UPDATE ou DELETE.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | uuid | PK, default gen_random_uuid() | |
+| faturas_processadas_id | uuid | FK → faturas_processadas.id ON DELETE CASCADE, NOT NULL | Fatura processada editada |
+| campo_alterado | text | NOT NULL | Nome do campo que foi alterado |
+| valor_anterior | text | nullable | Valor antes da edição (serializado como texto) |
+| valor_novo | text | nullable | Valor após a edição (serializado como texto) |
+| alterado_por | uuid | FK → profiles.id, NOT NULL | Admin que fez a alteração |
+| alterado_em | timestamptz | NOT NULL, default now() | Data/hora da alteração |
+
+**Relationships:**
+- faturas_processadas_log.faturas_processadas_id → faturas_processadas.id
+- faturas_processadas_log.alterado_por → profiles.id
+
+**RLS Policies:**
+- SELECT: Apenas admin.
+- INSERT: Apenas admin.
+- UPDATE/DELETE: Nenhum (logs imutáveis).
+
+---
+
 ## Indexes
 
 | Table | Column(s) | Type | Reason |
@@ -477,6 +502,7 @@ Tarifas importadas do BI da ANEEL. Registros nunca são sobrescritos — cada im
 | faturas_processadas | uc_id, mes_referencia | btree (unique) | Busca por UC e período |
 | faturas_processadas | uc_id | btree | Filtro por UC |
 | impostos_concessionaria | concessionaria_sigla, vigencia_inicio, vigencia_fim | btree | Lookup por concessionária + data |
+| faturas_processadas_log | faturas_processadas_id | btree | Busca por fatura processada |
 
 ---
 

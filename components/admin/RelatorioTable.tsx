@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   FileText,
@@ -14,6 +14,8 @@ import {
   Loader2,
   ExternalLink,
   FileSearch,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { exportToCSV } from "@/lib/export-csv";
@@ -108,6 +110,18 @@ export function RelatorioTable({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [relatorios.length]);
+
+  const totalPages = Math.ceil(relatorios.length / PAGE_SIZE);
+  const paginatedRelatorios = relatorios.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
 
   async function handleMarcarEnviado(id: string) {
     await updateRelatorioStatus(id, "enviado");
@@ -217,32 +231,34 @@ export function RelatorioTable({
           Exportar CSV
         </Button>
       </div>
-      <div className="rounded-lg border border-border">
-        <Table>
+      <div className="rounded-lg border border-border overflow-hidden">
+        <Table className="table-fixed w-full">
           <TableHeader>
             <TableRow>
-              <TableHead>Cliente</TableHead>
-              <TableHead>UC</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead>Mês ref.</TableHead>
-              <TableHead className="text-right">Geração</TableHead>
-              <TableHead className="text-right">Economia</TableHead>
-              <TableHead>Performance</TableHead>
-              <TableHead>Envio</TableHead>
-              <TableHead>Gerado em</TableHead>
-              <TableHead className="w-12" />
+              <TableHead className="w-[18%]">Cliente</TableHead>
+              <TableHead className="w-[10%]">UC</TableHead>
+              <TableHead className="w-[8%]">Tipo</TableHead>
+              <TableHead className="w-[10%]">Mês ref.</TableHead>
+              <TableHead className="w-[10%] text-right">Geração</TableHead>
+              <TableHead className="w-[10%] text-right">Economia</TableHead>
+              <TableHead className="w-[12%]">Performance</TableHead>
+              <TableHead className="w-[8%]">Envio</TableHead>
+              <TableHead className="w-[10%] hidden lg:table-cell">Gerado em</TableHead>
+              <TableHead className="w-[4%]" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {relatorios.map((rel) => {
+            {paginatedRelatorios.map((rel) => {
               const isPendente = rel.status_envio !== "enviado";
 
               return (
                 <TableRow key={rel.id}>
-                  <TableCell className="font-medium">
+                  <TableCell className="font-medium truncate max-w-0" title={rel.empresa?.nome || "—"}>
                     {rel.empresa?.nome || "—"}
                   </TableCell>
-                  <TableCell>{rel.uc?.codigo_uc || "—"}</TableCell>
+                  <TableCell className="truncate max-w-0" title={rel.uc?.codigo_uc || "—"}>
+                    {rel.uc?.codigo_uc || "—"}
+                  </TableCell>
                   <TableCell>
                     <Badge
                       variant="outline"
@@ -252,18 +268,18 @@ export function RelatorioTable({
                           : "border-amber-200 bg-amber-50 text-amber-700"
                       }
                     >
-                      {rel.tipo_relatorio === "real" ? "Real" : "Estimado"}
+                      {rel.tipo_relatorio === "real" ? "Real" : "Est."}
                     </Badge>
                   </TableCell>
-                  <TableCell className="capitalize">
+                  <TableCell className="capitalize whitespace-nowrap">
                     {formatMesReferencia(rel.mes_referencia)}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right tabular-nums whitespace-nowrap">
                     {rel.geracao_kwh !== null
                       ? formatKWh(rel.geracao_kwh)
                       : "—"}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right tabular-nums whitespace-nowrap">
                     {rel.economia_reais !== null
                       ? formatCurrency(rel.economia_reais)
                       : "—"}
@@ -282,7 +298,7 @@ export function RelatorioTable({
                       return (
                         <div className="flex flex-col gap-0.5">
                           {prRounded != null && (
-                            <span className="text-sm font-medium tabular-nums">
+                            <span className="text-xs font-medium tabular-nums">
                               PR {prRounded}%
                             </span>
                           )}
@@ -306,7 +322,7 @@ export function RelatorioTable({
                       {STATUS_LABELS[rel.status_envio] || rel.status_envio}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
+                  <TableCell className="text-xs text-muted-foreground hidden lg:table-cell">
                     {rel.created_at ? formatDateTime(rel.created_at) : "—"}
                   </TableCell>
                   <TableCell>
@@ -381,6 +397,38 @@ export function RelatorioTable({
           </TableBody>
         </Table>
       </div>
+
+      {/* Paginação */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-1">
+          <p className="text-sm text-muted-foreground">
+            {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, relatorios.length)} de {relatorios.length} relatórios
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((p) => p - 1)}
+            >
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              Anterior
+            </Button>
+            <span className="text-sm text-muted-foreground tabular-nums">
+              {currentPage} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage((p) => p + 1)}
+            >
+              Próximo
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Dialog de edição de fatura */}
       <Dialog

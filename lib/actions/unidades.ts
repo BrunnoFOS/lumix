@@ -475,7 +475,13 @@ export async function vincularSolisUC(
     .maybeSingle();
 
   if (existingLink) {
-    return { error: "Esta usina já está vinculada a uma UC." };
+    const { data: ucExistente } = await supabase
+      .from("unidades_consumidoras")
+      .select("codigo_uc")
+      .eq("id", existingLink.uc_id)
+      .single();
+    const nomeUC = ucExistente?.codigo_uc ?? "desconhecida";
+    return { error: `Esta usina já está vinculada à UC "${nomeUC}".` };
   }
 
   // Detectar provider via usinas_cache
@@ -554,7 +560,13 @@ export async function vincularStationAUC(
     .maybeSingle();
 
   if (existingLink) {
-    return { error: "Esta usina já está vinculada a uma UC." };
+    const { data: ucExistente } = await supabase
+      .from("unidades_consumidoras")
+      .select("codigo_uc")
+      .eq("id", existingLink.uc_id)
+      .single();
+    const nomeUC = ucExistente?.codigo_uc ?? "desconhecida";
+    return { error: `Esta usina já está vinculada à UC "${nomeUC}".` };
   }
 
   const { error } = await supabase.from("uc_stations").insert({

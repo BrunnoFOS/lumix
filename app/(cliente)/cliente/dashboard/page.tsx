@@ -1,11 +1,12 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentProfile } from "@/lib/actions/profile";
-import { getUCIdsCliente, getUltimoMesComDados, getResumoGeracaoCliente, getDadosGeracaoCliente, getEconomiaCliente } from "@/lib/actions/dados-geracao";
+import { getUCIdsCliente, getUltimoMesComDados, getResumoGeracaoCliente, getDadosGeracaoCliente, getEconomiaCliente, getUsinasOfflineCliente } from "@/lib/actions/dados-geracao";
 import { DashboardCards } from "@/components/cliente/DashboardCards";
 import { GeracaoChartLazy } from "@/components/cliente/GeracaoChartLazy";
 import { EconomiaChartLazy } from "@/components/cliente/EconomiaChartLazy";
 import { DashboardPeriodFilter } from "@/components/cliente/DashboardPeriodFilter";
+import { UsinasOfflineBanner } from "@/components/cliente/UsinasOfflineBanner";
 
 interface Props {
   searchParams: Promise<{ mes?: string }>;
@@ -28,10 +29,11 @@ export default async function ClienteDashboardPage({ searchParams }: Props) {
   // Se nenhum mes foi selecionado, usar o ultimo mes com dados
   const mesSelecionado = params.mes || await getUltimoMesComDados(ucIds);
 
-  const [resumo, dadosGeracao, dadosEconomia] = await Promise.all([
+  const [resumo, dadosGeracao, dadosEconomia, usinasOffline] = await Promise.all([
     getResumoGeracaoCliente(profile.empresa_id, mesSelecionado, ucIds),
     getDadosGeracaoCliente(profile.empresa_id, ucIds),
     getEconomiaCliente(profile.empresa_id, ucIds),
+    getUsinasOfflineCliente(profile.empresa_id),
   ]);
 
   // Agrupar dados por mes para o grafico (ultimos 12 meses)
@@ -85,6 +87,8 @@ export default async function ClienteDashboardPage({ searchParams }: Props) {
           <DashboardPeriodFilter defaultMes={mesSelecionado} />
         </Suspense>
       </div>
+
+      <UsinasOfflineBanner usinas={usinasOffline} />
 
       <DashboardCards
         geracaoTotal={resumo.geracao_total}

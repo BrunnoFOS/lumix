@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Zap, Save } from "lucide-react";
+import { Loader2, Zap, Save, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,7 @@ import {
   type TarifaOpcoes,
   type TarifaLookupResult,
 } from "@/lib/actions/tarifas-aneel";
+import type { UCSectionHandle } from "@/types/uc-section";
 
 const GRUPOS = [
   { value: "grupo_a", label: "Grupo A (Alta tensão)" },
@@ -39,9 +40,10 @@ interface Props {
     cofins_aliquota: number | null;
   };
   opcoesTarifarias: TarifaOpcoes;
+  onChangeStatus?: () => void;
 }
 
-export function UCClassificacaoTarifaria({ ucId, initial, opcoesTarifarias }: Props) {
+export const UCClassificacaoTarifaria = forwardRef<UCSectionHandle, Props>(function UCClassificacaoTarifaria({ ucId, initial, opcoesTarifarias, onChangeStatus }, ref) {
   const router = useRouter();
 
   const [grupo, setGrupo] = useState(initial.grupo_tarifario ?? "");
@@ -145,6 +147,15 @@ export function UCClassificacaoTarifaria({ ucId, initial, opcoesTarifarias }: Pr
     pis !== (initial.pis_aliquota != null ? (initial.pis_aliquota * 100).toFixed(2) : "") ||
     cofins !== (initial.cofins_aliquota != null ? (initial.cofins_aliquota * 100).toFixed(2) : "");
 
+  useImperativeHandle(ref, () => ({
+    save: handleSave,
+    hasChanges,
+  }), [hasChanges]);
+
+  useEffect(() => {
+    onChangeStatus?.();
+  }, [hasChanges, onChangeStatus]);
+
   return (
     <Card className="overflow-visible">
       <CardHeader>
@@ -170,6 +181,19 @@ export function UCClassificacaoTarifaria({ ucId, initial, opcoesTarifarias }: Pr
         </div>
       </CardHeader>
       <CardContent className="space-y-4 overflow-visible">
+        {(() => {
+          const isIncomplete = !grupo || !subgrupo || (isAcl ? !contratoAcl : (!concessionaria || !modalidade));
+          return isIncomplete ? (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <p className="text-xs text-amber-800">
+                {isAcl
+                  ? "Grupo tarifário, subgrupo e contrato ACL (R$/MWh) são obrigatórios para a geração de relatórios e cálculo de economia."
+                  : "Grupo tarifário, subgrupo, concessionária e modalidade são obrigatórios para a geração de relatórios e cálculo de economia."}
+              </p>
+            </div>
+          ) : null;
+        })()}
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Grupo tarifário</Label>
@@ -327,4 +351,4 @@ export function UCClassificacaoTarifaria({ ucId, initial, opcoesTarifarias }: Pr
       </CardContent>
     </Card>
   );
-}
+});

@@ -1,5 +1,63 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+
+// ——— Sincronização manual de UCs via webhook N8N ———
+
+export async function triggerSyncUCs(): Promise<{ success?: boolean; error?: string }> {
+  const user = process.env.N8N_API_USER;
+  const password = process.env.N8N_API_PASSWORD;
+
+  if (!user || !password) {
+    return { error: "Variáveis de ambiente N8N não configuradas." };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+
+  try {
+    const credentials = Buffer.from(`${user}:${password}`).toString("base64");
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Basic ${credentials}`,
+    };
+    const body = JSON.stringify({});
+
+    const [res1, res2] = await Promise.all([
+      fetch("https://n8n-n8n.nt4zcb.easypanel.host/webhook/botao_update_uc", {
+        method: "POST",
+        headers,
+        body,
+        cache: "no-store",
+        signal: controller.signal,
+      }),
+      fetch("https://n8n-n8n.nt4zcb.easypanel.host/webhook/botao_update_uc_solis", {
+        method: "POST",
+        headers,
+        body,
+        cache: "no-store",
+        signal: controller.signal,
+      }),
+    ]);
+
+    clearTimeout(timeout);
+
+    if (!res1.ok || !res2.ok) {
+      const failed = [
+        !res1.ok && `SunGrow (${res1.status})`,
+        !res2.ok && `Solis (${res2.status})`,
+      ].filter(Boolean).join(", ");
+      return { error: `Erro ao sincronizar UCs: ${failed}.` };
+    }
+
+    revalidatePath("/admin/unidades");
+    return { success: true };
+  } catch {
+    clearTimeout(timeout);
+    return { error: "Erro de conexão ao sincronizar UCs. Tente novamente." };
+  }
+}
+
 // ——— Tipos de geração mensal ———
 
 export interface SolisGeracaoDia {
@@ -98,7 +156,27 @@ export async function fetchSolisGeracaoMensal(
       return { data: null, error: "Resposta inválida do serviço Solis." };
     }
 
-    return { data: result as SolisGeracaoMensal };
+    const data = result as SolisGeracaoMensal;
+
+    // Se station_name veio vazio ou igual ao stationId, buscar nome real na usinas_cache
+    if (!data.usina.station_name || data.usina.station_name === stationId) {
+      try {
+        const supabase = await createServerClient();
+        const { data: cache } = await supabase
+          .from("usinas_cache")
+          .select("station_name")
+          .eq("station_id", stationId)
+          .single();
+
+        if (cache?.station_name) {
+          data.usina.station_name = cache.station_name;
+        }
+      } catch {
+        // Se falhar a busca no cache, mantém o valor original
+      }
+    }
+
+    return { data };
   } catch {
     clearTimeout(timeout);
     return { data: null, error: "Erro de conexão com o serviço Solis." };
@@ -346,7 +424,27 @@ export async function fetchSungrowGeracaoMensal(
       return { data: null, error: "Resposta vazia do serviço SunGrow." };
     }
 
-    return { data: normalizeSungrowToGeracaoMensal(result, stationId) };
+    const data = normalizeSungrowToGeracaoMensal(result, stationId);
+
+    // Se station_name caiu no fallback (ficou igual ao stationId), buscar nome real na usinas_cache
+    if (data.usina.station_name === stationId) {
+      try {
+        const supabase = await createServerClient();
+        const { data: cache } = await supabase
+          .from("usinas_cache")
+          .select("station_name")
+          .eq("station_id", stationId)
+          .single();
+
+        if (cache?.station_name) {
+          data.usina.station_name = cache.station_name;
+        }
+      } catch {
+        // Se falhar a busca no cache, mantém o stationId como fallback final
+      }
+    }
+
+    return { data };
   } catch {
     clearTimeout(timeout);
     return { data: null, error: "Erro de conexão com o serviço SunGrow." };
@@ -898,6 +996,72 @@ export async function fetchGeracaoMensalAuto(
   // Buscar consolidado
   const result = await fetchGeracaoMensalConsolidada(siblings, month, dataInicio, dataFim);
   return { ...result, isConsolidated: true };
+}
+
+// ——— Usinas offline (todos inversores state=2) ———
+
+export interface UsinaOffline {
+  station_id: string;
+  station_name: string;
+  uc_codigo: string | null;
+  empresa_nome: string | null;
+  synced_at: string;
+}
+
+export async function getUsinasOffline(): Promise<UsinaOffline[]> {
+  const supabase = await createServerClient();
+
+  // Buscar todas as stations com inversores_detalhe preenchido
+  const { data: rows, error } = await supabase
+    .from("usinas_cache")
+    .select("station_id, station_name, inversores_detalhe, synced_at")
+    .not("inversores_detalhe", "eq", "[]");
+
+  if (error || !rows) return [];
+
+  // Filtrar: só stations onde TODOS inversores têm state=2
+  const offlineStationIds: { station_id: string; station_name: string; synced_at: string }[] = [];
+  for (const row of rows) {
+    const inversores = row.inversores_detalhe as UsinaInversor[] | null;
+    if (!inversores || inversores.length === 0) continue;
+    const allOffline = inversores.every((inv) => inv.state === 2);
+    if (allOffline) {
+      offlineStationIds.push({
+        station_id: row.station_id,
+        station_name: row.station_name,
+        synced_at: row.synced_at,
+      });
+    }
+  }
+
+  if (offlineStationIds.length === 0) return [];
+
+  // Buscar UC e empresa vinculadas via uc_stations
+  const { data: links } = await supabase
+    .from("uc_stations")
+    .select("station_id, uc:unidades_consumidoras(codigo_uc, empresa:empresas(nome))")
+    .in("station_id", offlineStationIds.map((s) => s.station_id));
+
+  const linkMap = new Map<string, { uc_codigo: string | null; empresa_nome: string | null }>();
+  if (links) {
+    for (const link of links) {
+      const uc = link.uc as unknown as { codigo_uc: string; empresa: { nome: string } | { nome: string }[] | null } | null;
+      const empresaRaw = uc?.empresa;
+      const empresa = Array.isArray(empresaRaw) ? empresaRaw[0] : empresaRaw;
+      linkMap.set(link.station_id, {
+        uc_codigo: uc?.codigo_uc ?? null,
+        empresa_nome: empresa?.nome ?? null,
+      });
+    }
+  }
+
+  return offlineStationIds.map((s) => ({
+    station_id: s.station_id,
+    station_name: s.station_name,
+    uc_codigo: linkMap.get(s.station_id)?.uc_codigo ?? null,
+    empresa_nome: linkMap.get(s.station_id)?.empresa_nome ?? null,
+    synced_at: s.synced_at,
+  }));
 }
 
 // ——— UCs unificadas (banco + cache) para selectors ———

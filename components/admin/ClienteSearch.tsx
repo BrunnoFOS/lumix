@@ -49,7 +49,6 @@ export function ClienteSearch() {
         <SelectContent>
           <SelectItem value="todas">Todas</SelectItem>
           <SelectItem value="ativas">Ativas</SelectItem>
-          <SelectItem value="inativas">Inativas</SelectItem>
           <SelectItem value="arquivadas">Arquivadas</SelectItem>
         </SelectContent>
       </Select>

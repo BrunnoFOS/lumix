@@ -106,25 +106,6 @@ export async function updateEmpresa(
   return {};
 }
 
-export async function toggleEmpresa(
-  id: string,
-  ativa: boolean
-): Promise<ActionResult> {
-  const supabase = await createServerClient();
-
-  const { error } = await supabase
-    .from("empresas")
-    .update({ ativa })
-    .eq("id", id);
-
-  if (error) {
-    return { error: "Erro ao alterar status da empresa." };
-  }
-
-  revalidatePath("/admin/clientes");
-  return {};
-}
-
 export async function arquivarEmpresa(
   id: string,
   arquivada: boolean
@@ -133,7 +114,7 @@ export async function arquivarEmpresa(
 
   const { error } = await supabase
     .from("empresas")
-    .update({ arquivada })
+    .update({ arquivada, ativa: !arquivada })
     .eq("id", id);
 
   if (error) {
@@ -154,13 +135,10 @@ export async function getEmpresas(search?: string, status?: string) {
 
   if (status === "ativas") {
     query = query.eq("ativa", true).eq("arquivada", false);
-  } else if (status === "inativas") {
-    query = query.eq("ativa", false).eq("arquivada", false);
   } else if (status === "arquivadas") {
     query = query.eq("arquivada", true);
-  } else {
-    query = query.eq("arquivada", false);
   }
+  // else: sem filtro — retorna todas (ativas + arquivadas)
 
   if (search) {
     query = query.or(`nome.ilike.%${search}%,cnpj.ilike.%${search}%`);
@@ -203,8 +181,18 @@ export async function getEmpresaComRelacionamentos(id: string) {
     .eq("ativa", true)
     .order("codigo_uc");
 
+  // Buscar station_ids vinculados via uc_stations
+  const ucIds = (ucs ?? []).map((uc) => uc.id);
+  const { data: ucStationsRows } = ucIds.length > 0
+    ? await supabase.from("uc_stations").select("station_id").in("uc_id", ucIds)
+    : { data: [] as { station_id: string }[] };
+
   return {
     ...empresa,
     ucs: ucs ?? [],
+    stationIdsVinculados: [
+      ...(ucs ?? []).filter((uc) => uc.station_id).map((uc) => uc.station_id as string),
+      ...(ucStationsRows ?? []).map((row) => row.station_id),
+    ],
   };
 }

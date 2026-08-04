@@ -211,6 +211,97 @@ export interface UCInversores {
   provider: string;
 }
 
+export interface UsinaOfflineInfo {
+  uc_id: string;
+  codigo_uc: string;
+  station_name: string;
+  inversores_offline: number;
+  inversores_total: number;
+  inversores_alarme: number;
+}
+
+/**
+ * Verifica se alguma usina do cliente tem inversores offline ou em alarme.
+ * Retorna lista de UCs com problemas (para exibir notificação no dashboard).
+ */
+export async function getUsinasOfflineCliente(empresaId: string): Promise<UsinaOfflineInfo[]> {
+  const supabase = await createServerClient();
+
+  // Buscar UCs ativas da empresa
+  const { data: ucs } = await supabase
+    .from("unidades_consumidoras")
+    .select("id, codigo_uc")
+    .eq("empresa_id", empresaId)
+    .eq("ativa", true);
+
+  if (!ucs || ucs.length === 0) return [];
+
+  const ucIds = ucs.map((uc) => uc.id);
+  const ucMap = new Map(ucs.map((uc) => [uc.id, uc.codigo_uc]));
+
+  // Buscar stations vinculadas
+  const { data: stations } = await supabase
+    .from("uc_stations")
+    .select("uc_id, station_id")
+    .in("uc_id", ucIds);
+
+  if (!stations || stations.length === 0) return [];
+
+  const stationIds = stations.map((s) => s.station_id);
+
+  // Buscar cache com dados de inversores
+  const { data: cache } = await supabase
+    .from("usinas_cache")
+    .select("station_id, station_name, inversores_detalhe")
+    .in("station_id", stationIds);
+
+  if (!cache) return [];
+
+  const cacheMap = new Map(cache.map((c) => [c.station_id, c]));
+
+  const result: UsinaOfflineInfo[] = [];
+
+  // Agrupar por UC
+  const ucStationsMap = new Map<string, string[]>();
+  for (const s of stations) {
+    const list = ucStationsMap.get(s.uc_id) ?? [];
+    list.push(s.station_id);
+    ucStationsMap.set(s.uc_id, list);
+  }
+
+  for (const [ucId, stIds] of ucStationsMap) {
+    let totalInv = 0;
+    let offlineInv = 0;
+    let alarmeInv = 0;
+    let stationName = "";
+
+    for (const stId of stIds) {
+      const cached = cacheMap.get(stId);
+      if (!cached) continue;
+      if (!stationName) stationName = cached.station_name;
+      const inversores = (cached.inversores_detalhe as InversorDetalhe[]) || [];
+      for (const inv of inversores) {
+        totalInv++;
+        if (inv.state === 2) offlineInv++;
+        if (inv.state === 3) alarmeInv++;
+      }
+    }
+
+    if (offlineInv > 0 || alarmeInv > 0) {
+      result.push({
+        uc_id: ucId,
+        codigo_uc: ucMap.get(ucId) ?? "",
+        station_name: stationName,
+        inversores_offline: offlineInv,
+        inversores_total: totalInv,
+        inversores_alarme: alarmeInv,
+      });
+    }
+  }
+
+  return result;
+}
+
 export async function getInversoresCliente(ucIds: string[]): Promise<UCInversores[]> {
   if (ucIds.length === 0) return [];
 

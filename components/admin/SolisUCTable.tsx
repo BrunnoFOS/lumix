@@ -1,32 +1,20 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import Link from "next/link";
 import {
   Radio,
   AlertCircle,
   MapPin,
   Zap,
-  Calendar,
   Cpu,
   ChevronLeft,
   ChevronRight,
-  Settings,
   LinkIcon,
-  Loader2,
-  Save,
   ExternalLink,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Combobox } from "@/components/ui/combobox";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -35,28 +23,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  getOpcoesTarifarias,
-  lookupTarifas,
-  type TarifaOpcoes,
-  type TarifaLookupResult,
-} from "@/lib/actions/tarifas-aneel";
-import { updateClassificacaoTarifaria, criarOuAtualizarUCTarifaria } from "@/lib/actions/unidades";
 import type { UsinaUC } from "@/lib/actions/solis";
 
 const PAGE_SIZE = 10;
 
-const GRUPOS = [
-  { value: "grupo_a", label: "Grupo A (Alta tensão)" },
-  { value: "grupo_b", label: "Grupo B (Baixa tensão)" },
-  { value: "acl", label: "ACL (Mercado Livre)" },
-];
-
-const selectClass =
-  "flex h-8 w-full items-center rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
-
 function parseCity(cidadeUf: string | null): string {
-  if (!cidadeUf) return "—";
+  if (!cidadeUf) return "\u2014";
   const parts = cidadeUf.split("/");
   return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : cidadeUf;
 }
@@ -66,7 +38,7 @@ function inversorState(state: number): { label: string; variant: "default" | "ou
     case 1: return { label: "Online", variant: "default" };
     case 2: return { label: "Offline", variant: "outline" };
     case 3: return { label: "Alarme", variant: "destructive" };
-    default: return { label: "—", variant: "outline" };
+    default: return { label: "\u2014", variant: "outline" };
   }
 }
 
@@ -79,237 +51,16 @@ interface VinculadaInfo {
   modalidade_tarifaria_aneel?: string | null;
 }
 
-// ——— Dialog de classificação tarifária ———
-
-function TarifaDialog({
-  open,
-  onClose,
-  uc,
-  vinc,
-  opcoesTarifariasInicial,
-}: {
-  open: boolean;
-  onClose: () => void;
-  uc: UsinaUC;
-  vinc: VinculadaInfo | undefined;
-  opcoesTarifariasInicial: TarifaOpcoes;
-}) {
-  const router = useRouter();
-
-  const [grupo, setGrupo] = useState(vinc?.grupo_tarifario ?? "");
-  const [subgrupo, setSubgrupo] = useState(vinc?.subgrupo ?? "");
-  const [concessionaria, setConcessionaria] = useState(vinc?.concessionaria_sigla ?? "");
-  const [modalidade, setModalidade] = useState(vinc?.modalidade_tarifaria_aneel ?? "");
-
-  const [opcoes, setOpcoes] = useState(opcoesTarifariasInicial);
-  const [tarifas, setTarifas] = useState<TarifaLookupResult[]>([]);
-  const [loadingTarifas, setLoadingTarifas] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const isAcl = grupo === "acl";
-
-  // Reset ao abrir com nova UC
-  useEffect(() => {
-    if (open) {
-      setGrupo(vinc?.grupo_tarifario ?? "");
-      setSubgrupo(vinc?.subgrupo ?? "");
-      setConcessionaria(vinc?.concessionaria_sigla ?? "");
-      setModalidade(vinc?.modalidade_tarifaria_aneel ?? "");
-      setError(null);
-    }
-  }, [open, vinc]);
-
-  // Cascata de opções
-  useEffect(() => {
-    if (!open || isAcl) return;
-    async function refresh() {
-      const result = await getOpcoesTarifarias({
-        grupo: grupo || undefined,
-        subgrupo: subgrupo || undefined,
-        sigla: concessionaria || undefined,
-      });
-      setOpcoes(result);
-    }
-    refresh();
-  }, [open, grupo, subgrupo, concessionaria, isAcl]);
-
-  // Lookup de tarifas
-  const doLookup = useCallback(async () => {
-    if (!concessionaria || !subgrupo || isAcl) { setTarifas([]); return; }
-    setLoadingTarifas(true);
-    const result = await lookupTarifas(concessionaria, subgrupo, modalidade || null);
-    setTarifas(result);
-    setLoadingTarifas(false);
-  }, [concessionaria, subgrupo, modalidade, isAcl]);
-
-  useEffect(() => { doLookup(); }, [doLookup]);
-
-  async function handleSave() {
-    setSaving(true);
-    setError(null);
-
-    const data = {
-      grupo_tarifario: grupo || null,
-      subgrupo: subgrupo || null,
-      concessionaria_sigla: concessionaria || null,
-      modalidade_tarifaria_aneel: modalidade || null,
-    };
-
-    let result;
-    if (vinc?.ucId) {
-      result = await updateClassificacaoTarifaria(vinc.ucId, data);
-    } else {
-      result = await criarOuAtualizarUCTarifaria(uc.station_id, uc.station_name, data);
-    }
-
-    setSaving(false);
-
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
-
-    router.refresh();
-    onClose();
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg overflow-visible">
-        <DialogTitle className="flex items-center gap-2">
-          <Settings className="h-5 w-5 text-primary" />
-          Classificação tarifária
-        </DialogTitle>
-
-        <p className="text-sm text-muted-foreground">
-          {uc.station_name}
-          {vinc ? (
-            <span className="ml-2 text-xs text-green-600">({vinc.empresaNome})</span>
-          ) : (
-            <span className="ml-2 text-xs text-amber-600">(não vinculada a cliente)</span>
-          )}
-        </p>
-
-        {error && (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>
-        )}
-
-        <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Grupo tarifário</Label>
-              <Combobox
-                options={GRUPOS.map((g) => ({ value: g.value, label: g.label }))}
-                value={grupo}
-                onChange={(v) => {
-                  setGrupo(v);
-                  setSubgrupo("");
-                  setConcessionaria(v === "acl" ? "ACL" : "");
-                  setModalidade("");
-                }}
-                placeholder="Selecione"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Subgrupo</Label>
-              <Combobox
-                options={opcoes.subgrupos}
-                value={subgrupo}
-                onChange={(v) => { setSubgrupo(v); setModalidade(""); }}
-                placeholder={isAcl ? "N/A" : "Buscar subgrupo..."}
-                disabled={!grupo || isAcl}
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Concessionária</Label>
-              <Combobox
-                options={opcoes.siglas}
-                value={concessionaria}
-                onChange={(v) => { setConcessionaria(v); setModalidade(""); }}
-                placeholder={isAcl ? "N/A" : "Buscar concessionária..."}
-                disabled={isAcl}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Modalidade</Label>
-              <Combobox
-                options={opcoes.modalidades}
-                value={modalidade}
-                onChange={setModalidade}
-                placeholder={isAcl ? "N/A" : "Buscar modalidade..."}
-                disabled={!grupo || isAcl}
-              />
-            </div>
-          </div>
-
-          {/* Preview tarifas */}
-          {grupo && !isAcl && concessionaria && subgrupo && (
-            <div>
-              {loadingTarifas ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Buscando tarifas...
-                </div>
-              ) : tarifas.length > 0 ? (
-                <div className="rounded-lg border border-border bg-muted/30 p-3">
-                  <div className="mb-2 flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium">Tarifas vigentes</span>
-                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-[10px]">
-                      {tarifas.length}
-                    </Badge>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {tarifas.map((t, i) => (
-                      <div key={i} className="rounded-md border border-border bg-white px-3 py-2">
-                        <p className="text-xs font-medium">{t.posto}</p>
-                        <div className="mt-1 flex gap-3 text-xs text-muted-foreground">
-                          <span>TUSD: <span className="font-mono text-foreground">{t.tusd.toFixed(6)}</span></span>
-                          <span>TE: <span className="font-mono text-foreground">{t.te.toFixed(6)}</span></span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Nenhuma tarifa vigente encontrada.</p>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-end gap-3 pt-2">
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={handleSave} disabled={saving || !grupo}>
-            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            Salvar
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ——— Tabela principal ———
-
 export function SolisUCTable({
   ucs,
   error,
   vinculadas = {},
-  opcoesTarifarias,
 }: {
   ucs: UsinaUC[];
   error?: string;
   vinculadas?: Record<string, VinculadaInfo>;
-  opcoesTarifarias: TarifaOpcoes;
 }) {
   const [page, setPage] = useState(0);
-  const [selectedUC, setSelectedUC] = useState<UsinaUC | null>(null);
 
   if (error) {
     return (
@@ -346,8 +97,8 @@ export function SolisUCTable({
           <TableHeader>
             <TableRow>
               <TableHead>Usina</TableHead>
-              <TableHead>Localização</TableHead>
-              <TableHead>Potência (kWp)</TableHead>
+              <TableHead>Localiza\u00e7\u00e3o</TableHead>
+              <TableHead>Pot\u00eancia (kWp)</TableHead>
               <TableHead>Inversores</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Tarifa</TableHead>
@@ -359,7 +110,7 @@ export function SolisUCTable({
               const mainInversor = uc.inversores_detalhe?.[0];
               const status = mainInversor
                 ? inversorState(mainInversor.state)
-                : { label: "—", variant: "outline" as const };
+                : { label: "\u2014", variant: "outline" as const };
               const vinc = vinculadas[uc.station_id];
               const temTarifa = vinc?.grupo_tarifario;
 
@@ -406,27 +157,19 @@ export function SolisUCTable({
                         {vinc.subgrupo && <span className="text-muted-foreground"> / {vinc.subgrupo}</span>}
                       </div>
                     ) : (
-                      <span className="text-xs text-muted-foreground">Não configurada</span>
+                      <span className="text-xs text-muted-foreground">N\u00e3o configurada</span>
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1">
-                      {vinc && (
-                        <Link
-                          href={`/admin/unidades/${vinc.ucId}`}
-                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
-                          title="Detalhes da UC"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </Link>
-                      )}
-                      <button
-                        onClick={() => setSelectedUC(uc)}
-                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-accent transition-colors"
+                    {vinc && (
+                      <Link
+                        href={`/admin/unidades/${vinc.ucId}`}
+                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
+                        title="Detalhes da UC"
                       >
-                        <Settings className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Link>
+                    )}
                   </TableCell>
                 </TableRow>
               );
@@ -438,7 +181,7 @@ export function SolisUCTable({
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">
-            {start + 1}–{Math.min(start + PAGE_SIZE, ucs.length)} de {ucs.length}
+            {start + 1}\u2013{Math.min(start + PAGE_SIZE, ucs.length)} de {ucs.length}
           </span>
           <div className="flex items-center gap-1">
             <Button variant="outline" size="icon" className="h-8 w-8" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
@@ -450,16 +193,6 @@ export function SolisUCTable({
             </Button>
           </div>
         </div>
-      )}
-
-      {selectedUC && (
-        <TarifaDialog
-          open={!!selectedUC}
-          onClose={() => setSelectedUC(null)}
-          uc={selectedUC}
-          vinc={vinculadas[selectedUC.station_id]}
-          opcoesTarifariasInicial={opcoesTarifarias}
-        />
       )}
     </div>
   );

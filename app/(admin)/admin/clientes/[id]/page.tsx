@@ -26,14 +26,10 @@ export default async function ClienteDetalhesPage({ params }: Props) {
 
   if (!result) notFound();
 
-  const { ucs, ...empresa } = result;
+  const { ucs, stationIdsVinculados: vinculadosArr, ...empresa } = result;
 
-  // Combinar usinas de ambos os provedores com tag de provider
-  const stationIdsVinculados = new Set(
-    ucs
-      .filter((uc: { station_id: string | null }) => uc.station_id)
-      .map((uc: { station_id: string | null }) => uc.station_id as string)
-  );
+  // Combinar station_ids vinculados (legado + uc_stations)
+  const stationIdsVinculados = new Set(vinculadosArr);
 
   const todasUsinas = [
     ...solisUCs.data.map((u) => ({ ...u, provider: "solis" as const })),

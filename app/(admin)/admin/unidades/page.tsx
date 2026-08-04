@@ -5,14 +5,14 @@ import { SolisUCTable } from "@/components/admin/SolisUCTable";
 import { getUCs } from "@/lib/actions/unidades";
 import { getEmpresas } from "@/lib/actions/empresas";
 import { fetchSolisUCs, fetchSungrowUCs } from "@/lib/actions/solis";
-import { getOpcoesTarifarias } from "@/lib/actions/tarifas-aneel";
 import { createServerClient } from "@/lib/supabase/server";
+import { SyncUCsButton } from "@/components/admin/SyncUCsButton";
 
 import type { UsinaUC } from "@/lib/actions/solis";
 
 function filterUCs(
   ucs: UsinaUC[],
-  params: { search?: string; empresa?: string; vinculacao?: string },
+  params: { search?: string; empresa?: string; vinculacao?: string; tarifa?: string },
   vinculadas: Record<string, { ucId: string; empresaNome: string; grupo_tarifario?: string | null }>
 ): UsinaUC[] {
   let filtered = ucs;
@@ -35,9 +35,11 @@ function filterUCs(
     filtered = filtered.filter((uc) => vinculadas[uc.station_id]);
   } else if (params.vinculacao === "nao_vinculadas") {
     filtered = filtered.filter((uc) => !vinculadas[uc.station_id]);
-  } else if (params.vinculacao === "com_tarifa") {
+  }
+
+  if (params.tarifa === "com_tarifa") {
     filtered = filtered.filter((uc) => vinculadas[uc.station_id]?.grupo_tarifario);
-  } else if (params.vinculacao === "sem_tarifa") {
+  } else if (params.tarifa === "sem_tarifa") {
     filtered = filtered.filter((uc) => !vinculadas[uc.station_id]?.grupo_tarifario);
   }
 
@@ -45,7 +47,7 @@ function filterUCs(
 }
 
 interface Props {
-  searchParams: Promise<{ search?: string; empresa?: string; vinculacao?: string; provider?: string }>;
+  searchParams: Promise<{ search?: string; empresa?: string; vinculacao?: string; tarifa?: string }>;
 }
 
 async function fetchUCStations() {
@@ -58,12 +60,11 @@ async function fetchUCStations() {
 
 export default async function UnidadesPage({ searchParams }: Props) {
   const params = await searchParams;
-  const [unidades, empresas, solis, sungrow, opcoesTarifarias, ucStationsRows] = await Promise.all([
+  const [unidades, empresas, solis, sungrow, ucStationsRows] = await Promise.all([
     getUCs(params.search, params.empresa),
     getEmpresas(),
     fetchSolisUCs(),
     fetchSungrowUCs(),
-    getOpcoesTarifarias(),
     fetchUCStations(),
   ]);
 
@@ -117,13 +118,16 @@ export default async function UnidadesPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Unidades Consumidoras</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {totalUsinas} usina{totalUsinas !== 1 && "s"} detectada{totalUsinas !== 1 && "s"}
-          {" · "}
-          {totalVinculadas} vinculada{totalVinculadas !== 1 && "s"}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Unidades Consumidoras</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {totalUsinas} usina{totalUsinas !== 1 && "s"} detectada{totalUsinas !== 1 && "s"}
+            {" · "}
+            {totalVinculadas} vinculada{totalVinculadas !== 1 && "s"}
+          </p>
+        </div>
+        <SyncUCsButton />
       </div>
 
       <Suspense>
@@ -131,42 +135,36 @@ export default async function UnidadesPage({ searchParams }: Props) {
       </Suspense>
 
       {/* Usinas Solis */}
-      {(!params.provider || params.provider === "solis") && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Radio className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold text-foreground">Usinas Solis</h2>
-            <span className="text-sm text-muted-foreground">
-              ({solis.data.length})
-            </span>
-          </div>
-          <SolisUCTable
-            ucs={filterUCs(solis.data, params, vinculadas)}
-            error={solis.error}
-            vinculadas={vinculadas}
-            opcoesTarifarias={opcoesTarifarias}
-          />
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Radio className="h-5 w-5 text-primary" />
+          <h2 className="text-lg font-semibold text-foreground">Usinas Solis</h2>
+          <span className="text-sm text-muted-foreground">
+            ({solis.data.length})
+          </span>
         </div>
-      )}
+        <SolisUCTable
+          ucs={filterUCs(solis.data, params, vinculadas)}
+          error={solis.error}
+          vinculadas={vinculadas}
+        />
+      </div>
 
       {/* Usinas SunGrow */}
-      {(!params.provider || params.provider === "sungrow") && (
-        <div className="space-y-3 pt-2">
-          <div className="flex items-center gap-2">
-            <Sun className="h-5 w-5 text-secondary" />
-            <h2 className="text-lg font-semibold text-foreground">Usinas SunGrow</h2>
-            <span className="text-sm text-muted-foreground">
-              ({sungrow.data.length})
-            </span>
-          </div>
-          <SolisUCTable
-            ucs={filterUCs(sungrow.data, params, vinculadas)}
-            error={sungrow.error}
-            vinculadas={vinculadas}
-            opcoesTarifarias={opcoesTarifarias}
-          />
+      <div className="space-y-3 pt-2">
+        <div className="flex items-center gap-2">
+          <Sun className="h-5 w-5 text-secondary" />
+          <h2 className="text-lg font-semibold text-foreground">Usinas SunGrow</h2>
+          <span className="text-sm text-muted-foreground">
+            ({sungrow.data.length})
+          </span>
         </div>
-      )}
+        <SolisUCTable
+          ucs={filterUCs(sungrow.data, params, vinculadas)}
+          error={sungrow.error}
+          vinculadas={vinculadas}
+        />
+      </div>
     </div>
   );
 }

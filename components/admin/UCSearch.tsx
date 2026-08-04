@@ -59,19 +59,6 @@ export function UCSearch({ empresas }: UCSearchProps) {
         />
       </div>
       <Select
-        value={searchParams.get("provider") ?? "todos"}
-        onValueChange={(v) => updateParam("provider", v === "todos" ? "" : v ?? "")}
-      >
-        <SelectTrigger className="w-32">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="todos">Todos</SelectItem>
-          <SelectItem value="solis">Solis</SelectItem>
-          <SelectItem value="sungrow">SunGrow</SelectItem>
-        </SelectContent>
-      </Select>
-      <Select
         value={searchParams.get("vinculacao") ?? "todas"}
         onValueChange={(v) => updateParam("vinculacao", v === "todas" ? "" : v ?? "")}
       >
@@ -82,6 +69,17 @@ export function UCSearch({ empresas }: UCSearchProps) {
           <SelectItem value="todas">Todas</SelectItem>
           <SelectItem value="vinculadas">Vinculadas</SelectItem>
           <SelectItem value="nao_vinculadas">Não vinculadas</SelectItem>
+        </SelectContent>
+      </Select>
+      <Select
+        value={searchParams.get("tarifa") ?? "todas"}
+        onValueChange={(v) => updateParam("tarifa", v === "todas" ? "" : v ?? "")}
+      >
+        <SelectTrigger className="w-36">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="todas">Todas</SelectItem>
           <SelectItem value="com_tarifa">Com tarifa</SelectItem>
           <SelectItem value="sem_tarifa">Sem tarifa</SelectItem>
         </SelectContent>

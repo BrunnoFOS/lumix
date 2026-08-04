@@ -4,6 +4,7 @@ import { getRelatorios } from "@/lib/actions/relatorios";
 import { RelatorioSearch } from "@/components/admin/RelatorioSearch";
 import { RelatorioPageClient } from "@/components/admin/RelatorioPageClient";
 import { SolisGeracaoMensal } from "@/components/admin/SolisGeracaoMensal";
+import { UsinasOfflineBanner } from "@/components/admin/UsinasOfflineBanner";
 import { createServerClient } from "@/lib/supabase/server";
 import { fetchSolisUCs } from "@/lib/actions/solis";
 import type { UCOption } from "@/lib/actions/solis";
@@ -142,6 +143,11 @@ export default async function RelatoriosPage({ searchParams }: Props) {
           Gerencie relatórios de geração
         </p>
       </div>
+
+      {/* Banner de usinas offline */}
+      <Suspense fallback={null}>
+        <UsinasOfflineBanner />
+      </Suspense>
 
       {/* Geração mensal — streamed independently */}
       <Suspense fallback={<GeracaoMensalFallback />}>

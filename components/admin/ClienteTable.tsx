@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2, MoreHorizontal, Eye, Pencil, Power, Archive, Download } from "lucide-react";
+import { Building2, MoreHorizontal, Eye, Pencil, Archive, Download } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCNPJ } from "@/lib/utils";
-import { toggleEmpresa, arquivarEmpresa } from "@/lib/actions/empresas";
+import { arquivarEmpresa } from "@/lib/actions/empresas";
 import { exportToCSV } from "@/lib/export-csv";
 import { Button } from "@/components/ui/button";
 
@@ -38,11 +38,6 @@ interface Empresa {
 export function ClienteTable({ empresas }: { empresas: Empresa[] }) {
   const router = useRouter();
 
-  async function handleToggle(id: string, ativa: boolean) {
-    await toggleEmpresa(id, !ativa);
-    router.refresh();
-  }
-
   async function handleArchive(id: string, arquivada: boolean) {
     await arquivarEmpresa(id, !arquivada);
     router.refresh();
@@ -51,7 +46,7 @@ export function ClienteTable({ empresas }: { empresas: Empresa[] }) {
   function handleExport() {
     exportToCSV("empresas", ["Nome", "CNPJ", "Cidade", "UF", "Status"], empresas.map((e) => [
       e.nome, formatCNPJ(e.cnpj), e.cidade, e.estado,
-      e.arquivada ? "Arquivada" : e.ativa ? "Ativa" : "Inativa",
+      e.arquivada ? "Arquivada" : "Ativa",
     ]));
   }
 
@@ -105,8 +100,8 @@ export function ClienteTable({ empresas }: { empresas: Empresa[] }) {
                   : "—"}
               </TableCell>
               <TableCell>
-                <Badge variant={empresa.arquivada ? "outline" : empresa.ativa ? "default" : "secondary"}>
-                  {empresa.arquivada ? "Arquivada" : empresa.ativa ? "Ativa" : "Inativa"}
+                <Badge variant={empresa.arquivada ? "outline" : "default"}>
+                  {empresa.arquivada ? "Arquivada" : "Ativa"}
                 </Badge>
               </TableCell>
               <TableCell>
@@ -126,12 +121,6 @@ export function ClienteTable({ empresas }: { empresas: Empresa[] }) {
                         <Pencil className="mr-2 h-4 w-4" />
                         Editar
                       </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => handleToggle(empresa.id, empresa.ativa)}
-                    >
-                      <Power className="mr-2 h-4 w-4" />
-                      {empresa.ativa ? "Desativar" : "Ativar"}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => handleArchive(empresa.id, empresa.arquivada)}

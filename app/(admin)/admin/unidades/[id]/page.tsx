@@ -1,12 +1,10 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, AlertCircle } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { UCClassificacaoTarifaria } from "@/components/admin/UCClassificacaoTarifaria";
-import { UCEndereco } from "@/components/admin/UCEndereco";
-import { UCParametrosEstimativa } from "@/components/admin/UCParametrosEstimativa";
+import { UCDetailSections } from "@/components/admin/UCDetailSections";
 import { getUC } from "@/lib/actions/unidades";
 import { getOpcoesTarifarias } from "@/lib/actions/tarifas-aneel";
 import { formatDate } from "@/lib/utils";
@@ -22,8 +20,7 @@ function DetailRow({ label, value }: { label: string; value: string | number | n
       <span className="text-muted-foreground">{label}</span>
       {missing ? (
         <span className="flex items-center gap-1 text-sm text-warning">
-          <AlertCircle className="h-3.5 w-3.5" />
-          Não informado
+          N\u00e3o informado
         </span>
       ) : (
         <span>{value}</span>
@@ -41,12 +38,6 @@ export default async function UCDetalhesPage({ params }: Props) {
 
   if (!uc) notFound();
 
-  const enquadramentoLabels: Record<string, string> = {
-    monofasico: "Monofásico",
-    bifasico: "Bifásico",
-    trifasico: "Trifásico",
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -62,7 +53,7 @@ export default async function UCDetalhesPage({ params }: Props) {
               </Badge>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              {uc.titular} —{" "}
+              {uc.titular} \u2014{" "}
               <Link
                 href={`/admin/clientes/${uc.empresa?.id}`}
                 className="text-primary hover:underline"
@@ -74,32 +65,16 @@ export default async function UCDetalhesPage({ params }: Props) {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Dados da UC</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <DetailRow label="Código UC" value={uc.codigo_uc} />
-            <DetailRow label="Titular" value={uc.titular} />
-            <DetailRow label="Distribuidora" value={uc.distribuidora} />
-            <DetailRow label="Enquadramento" value={enquadramentoLabels[uc.enquadramento_tarifario]} />
-          </CardContent>
-        </Card>
-
-        <UCEndereco
-          ucId={id}
-          initial={{
-            endereco: uc.endereco ?? null,
-            cidade: uc.cidade ?? null,
-            estado: uc.estado ?? null,
-          }}
-        />
-      </div>
-
-      <UCClassificacaoTarifaria
+      <UCDetailSections
         ucId={id}
-        initial={{
+        ucData={{
+          codigo_uc: uc.codigo_uc,
+          titular: uc.titular,
+          distribuidora: uc.distribuidora ?? null,
+          enquadramento_tarifario: uc.enquadramento_tarifario,
+          endereco: uc.endereco ?? null,
+          cidade: uc.cidade ?? null,
+          estado: uc.estado ?? null,
           grupo_tarifario: uc.grupo_tarifario ?? null,
           subgrupo: uc.subgrupo ?? null,
           concessionaria_sigla: uc.concessionaria_sigla ?? null,
@@ -108,34 +83,28 @@ export default async function UCDetalhesPage({ params }: Props) {
           icms_aliquota: uc.icms_aliquota ?? null,
           pis_aliquota: uc.pis_aliquota ?? null,
           cofins_aliquota: uc.cofins_aliquota ?? null,
-        }}
-        opcoesTarifarias={opcoesTarifarias}
-      />
-
-      <UCParametrosEstimativa
-        ucId={id}
-        initial={{
           data_inicio_degradacao: uc.data_inicio_degradacao ?? null,
           fator_rendimento: uc.fator_rendimento ?? null,
           degradacao_ano_zero: uc.degradacao_ano_zero ?? null,
           degradacao_anos_seguintes: uc.degradacao_anos_seguintes ?? null,
         }}
+        opcoesTarifarias={opcoesTarifarias}
       />
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Dados técnicos</CardTitle>
+          <CardTitle className="text-lg">Dados t\u00e9cnicos</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-3">
-            <DetailRow label="Potência instalada" value={uc.potencia_instalada_kwp ? `${uc.potencia_instalada_kwp} kWp` : null} />
+            <DetailRow label="Pot\u00eancia instalada" value={uc.potencia_instalada_kwp ? `${uc.potencia_instalada_kwp} kWp` : null} />
             <DetailRow label="Qtd. inversores" value={uc.quantidade_inversores} />
             <DetailRow label="Modelo inversores" value={uc.modelo_inversores} />
           </div>
           <div className="space-y-3">
-            <DetailRow label="Potência inversor" value={uc.potencia_inversor_kw ? `${uc.potencia_inversor_kw} kW` : null} />
-            <DetailRow label="Data instalação" value={uc.data_instalacao ? formatDate(uc.data_instalacao) : null} />
-            <DetailRow label="Geração estimada" value={uc.geracao_estimada_mensal_kwh ? `${uc.geracao_estimada_mensal_kwh} kWh/mês` : null} />
+            <DetailRow label="Pot\u00eancia inversor" value={uc.potencia_inversor_kw ? `${uc.potencia_inversor_kw} kW` : null} />
+            <DetailRow label="Data instala\u00e7\u00e3o" value={uc.data_instalacao ? formatDate(uc.data_instalacao) : null} />
+            <DetailRow label="Gera\u00e7\u00e3o estimada" value={uc.geracao_estimada_mensal_kwh ? `${uc.geracao_estimada_mensal_kwh} kWh/m\u00eas` : null} />
           </div>
         </CardContent>
       </Card>
@@ -143,7 +112,7 @@ export default async function UCDetalhesPage({ params }: Props) {
       {uc.observacoes && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Observações</CardTitle>
+            <CardTitle className="text-lg">Observa\u00e7\u00f5es</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">{uc.observacoes}</p>

@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Download, ExternalLink } from "lucide-react";
+import { ArrowLeft, Download, ExternalLink, FileSearch } from "lucide-react";
 import { getFatura } from "@/lib/actions/faturas";
+import { getFaturasProcessadasByUc } from "@/lib/actions/faturas-processadas";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/link-button";
@@ -32,6 +33,8 @@ export default async function FaturaDetalhePage({ params }: Props) {
 
   if (!fatura) notFound();
 
+  const faturaProcessada = await getFaturasProcessadasByUc(fatura.uc_id, fatura.mes_referencia);
+
   const uc = fatura.uc as { id: string; codigo_uc: string; titular: string; distribuidora: string; empresa: { id: string; nome: string } | null } | null;
 
   return (
@@ -53,27 +56,31 @@ export default async function FaturaDetalhePage({ params }: Props) {
         </Badge>
       </div>
 
-      {/* PDF actions */}
-      {(fatura.pdf_url || fatura.imagem_url) && (
-        <div className="flex gap-3">
-          {fatura.pdf_url && (
-            <a href={fatura.pdf_url} target="_blank" rel="noopener noreferrer">
-              <LinkButton href={fatura.pdf_url} variant="outline">
-                <Download className="mr-2 h-4 w-4" />
-                Baixar PDF
-              </LinkButton>
-            </a>
-          )}
-          {fatura.imagem_url && (
-            <a href={fatura.imagem_url} target="_blank" rel="noopener noreferrer">
-              <LinkButton href={fatura.imagem_url} variant="outline">
-                <ExternalLink className="mr-2 h-4 w-4" />
-                Ver imagem
-              </LinkButton>
-            </a>
-          )}
-        </div>
-      )}
+      {/* Actions */}
+      <div className="flex flex-wrap gap-3">
+        {fatura.pdf_url && (
+          <a href={fatura.pdf_url} target="_blank" rel="noopener noreferrer">
+            <LinkButton href={fatura.pdf_url} variant="outline">
+              <Download className="mr-2 h-4 w-4" />
+              Baixar PDF
+            </LinkButton>
+          </a>
+        )}
+        {fatura.imagem_url && (
+          <a href={fatura.imagem_url} target="_blank" rel="noopener noreferrer">
+            <LinkButton href={fatura.imagem_url} variant="outline">
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Ver imagem
+            </LinkButton>
+          </a>
+        )}
+        {faturaProcessada && (
+          <LinkButton href={`/admin/faturas-processadas/${faturaProcessada.id}`} variant="outline">
+            <FileSearch className="mr-2 h-4 w-4" />
+            Ver dados extraídos
+          </LinkButton>
+        )}
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {/* Identificação */}

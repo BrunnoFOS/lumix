@@ -191,3 +191,13 @@ export interface FaturaProcessada {
   created_at: string;
   updated_at: string;
 }
+
+export interface FaturaProcessadaLog {
+  id: string;
+  faturas_processadas_id: string;
+  campo_alterado: string;
+  valor_anterior: string | null;
+  valor_novo: string | null;
+  alterado_por: string;
+  alterado_em: string;
+}

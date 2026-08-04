@@ -3,25 +3,20 @@
 import { useState, useCallback, useRef } from "react";
 import { Upload, X, FileText, FileImage } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "application/pdf"];
 
 interface FileUploadProps {
-  bucket: string;
-  path: string;
-  onUpload: (url: string, isPdf: boolean) => void;
+  onFileSelect: (file: File | null) => void;
   label?: string;
 }
 
-export function FileUpload({ bucket, path, onUpload, label = "Arquivo da fatura" }: FileUploadProps) {
+export function FileUpload({ onFileSelect, label = "Arquivo da fatura" }: FileUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploaded, setUploaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const validateFile = useCallback((f: File): string | null => {
@@ -39,7 +34,7 @@ export function FileUpload({ bucket, path, onUpload, label = "Arquivo da fatura"
     if (err) { setError(err); return; }
     setError(null);
     setFile(f);
-    setUploaded(false);
+    onFileSelect(f);
     if (f.type.startsWith("image/")) {
       const reader = new FileReader();
       reader.onload = (e) => setPreview(e.target?.result as string);
@@ -47,49 +42,15 @@ export function FileUpload({ bucket, path, onUpload, label = "Arquivo da fatura"
     } else {
       setPreview(null);
     }
-  }, [validateFile]);
+  }, [validateFile, onFileSelect]);
 
   const handleRemove = useCallback(() => {
     setFile(null);
     setPreview(null);
     setError(null);
-    setUploaded(false);
+    onFileSelect(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
-  }, []);
-
-  async function handleUpload() {
-    if (!file) return;
-    setUploading(true);
-    setError(null);
-
-    try {
-      const supabase = createClient();
-      const ext = file.name.split(".").pop();
-      const fileName = `${path}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from(bucket)
-        .upload(fileName, file, { upsert: true });
-
-      if (uploadError) {
-        setError("Erro ao fazer upload. Tente novamente.");
-        setUploading(false);
-        return;
-      }
-
-      const { data: urlData } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(fileName);
-
-      const isPdf = file.type === "application/pdf";
-      onUpload(urlData.publicUrl, isPdf);
-      setUploaded(true);
-    } catch {
-      setError("Erro inesperado no upload.");
-    } finally {
-      setUploading(false);
-    }
-  }
+  }, [onFileSelect]);
 
   return (
     <div className="space-y-3">
@@ -141,18 +102,9 @@ export function FileUpload({ bucket, path, onUpload, label = "Arquivo da fatura"
                 <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              {uploaded ? (
-                <span className="text-xs font-medium text-emerald-600">Enviado</span>
-              ) : (
-                <Button size="sm" onClick={handleUpload} disabled={uploading}>
-                  {uploading ? "Enviando..." : "Enviar"}
-                </Button>
-              )}
-              <Button variant="ghost" size="icon" onClick={handleRemove} className="h-8 w-8">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+            <Button variant="ghost" size="icon" onClick={handleRemove} className="h-8 w-8">
+              <X className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       )}
