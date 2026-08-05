@@ -13,36 +13,33 @@ export default async function UsinaPage() {
 
   const supabase = await createServerClient();
 
-  // Buscar UCs com campos completos + vinculos de stations
-  const [{ data: ucs }, { data: ucStations }] = await Promise.all([
-    supabase
-      .from("unidades_consumidoras")
-      .select("id, codigo_uc, titular, endereco, cidade, estado, distribuidora, enquadramento_tarifario, modalidade_tarifaria, grupo_tarifario, subgrupo, potencia_instalada_kwp, quantidade_modulos, modelo_modulos, potencia_modulo_w, quantidade_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, geracao_estimada_mensal_kwh, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, data_inicio_degradacao, ativa, observacoes")
-      .eq("empresa_id", profile.empresa_id)
-      .eq("ativa", true)
-      .order("codigo_uc"),
-    supabase
-      .from("uc_stations")
-      .select("uc_id, station_id, provider")
-      .in("uc_id", (await supabase
-        .from("unidades_consumidoras")
-        .select("id")
-        .eq("empresa_id", profile.empresa_id)
-        .eq("ativa", true)
-      ).data?.map((uc) => uc.id) ?? []),
-  ]);
+  // Fetch UCs first (needed for uc_stations query)
+  const { data: ucs } = await supabase
+    .from("unidades_consumidoras")
+    .select("id, codigo_uc, titular, endereco, cidade, estado, distribuidora, enquadramento_tarifario, modalidade_tarifaria, grupo_tarifario, subgrupo, potencia_instalada_kwp, quantidade_modulos, modelo_modulos, potencia_modulo_w, quantidade_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, geracao_estimada_mensal_kwh, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, data_inicio_degradacao, ativa, observacoes")
+    .eq("empresa_id", profile.empresa_id)
+    .eq("ativa", true)
+    .order("codigo_uc");
 
   const ucsList = ucs ?? [];
   const ucIds = ucsList.map((uc) => uc.id);
 
-  // Buscar inversores e dados de cache em paralelo
-  const [inversoresData, { data: usinasCache }] = await Promise.all([
+  // Parallelize uc_stations + inversores (both depend only on ucIds)
+  const [{ data: ucStations }, inversoresData] = await Promise.all([
+    ucIds.length > 0
+      ? supabase.from("uc_stations").select("uc_id, station_id, provider").in("uc_id", ucIds)
+      : Promise.resolve({ data: [] as { uc_id: string; station_id: string; provider: string }[] }),
     getInversoresCliente(ucIds),
-    supabase
-      .from("usinas_cache")
-      .select("station_id, station_name, cidade_uf, potencia_instalada_kwp, qtd_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, synced_at")
-      .in("station_id", (ucStations ?? []).map((s) => s.station_id)),
   ]);
+
+  // Fetch usinas_cache (depends on ucStations result)
+  const stationIds = (ucStations ?? []).map((s) => s.station_id);
+  const { data: usinasCache } = stationIds.length > 0
+    ? await supabase
+        .from("usinas_cache")
+        .select("station_id, station_name, cidade_uf, potencia_instalada_kwp, qtd_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, synced_at")
+        .in("station_id", stationIds)
+    : { data: [] as never[] };
 
   // Montar mapa de stations por UC
   const stationsMap = new Map<string, Array<{

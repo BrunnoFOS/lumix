@@ -165,23 +165,24 @@ export async function getEmpresa(id: string) {
 export async function getEmpresaComRelacionamentos(id: string) {
   const supabase = await createServerClient();
 
-  const { data: empresa, error } = await supabase
-    .from("empresas")
-    .select("id, nome, cnpj, tipo, matriz_id, endereco, cidade, estado, cep, telefone, email, responsavel, ativa, arquivada, created_at, updated_at")
-    .eq("id", id)
-    .single();
+  // Parallelize empresa + UCs (both use `id` directly)
+  const [{ data: empresa, error }, { data: ucs }] = await Promise.all([
+    supabase
+      .from("empresas")
+      .select("id, nome, cnpj, tipo, matriz_id, endereco, cidade, estado, cep, telefone, email, responsavel, ativa, arquivada, created_at, updated_at")
+      .eq("id", id)
+      .single(),
+    supabase
+      .from("unidades_consumidoras")
+      .select("id, codigo_uc, potencia_instalada_kwp, ativa, station_id, distribuidora")
+      .eq("empresa_id", id)
+      .eq("ativa", true)
+      .order("codigo_uc"),
+  ]);
 
   if (error || !empresa) return null;
 
-  // Buscar UCs da empresa
-  const { data: ucs } = await supabase
-    .from("unidades_consumidoras")
-    .select("id, codigo_uc, potencia_instalada_kwp, ativa, station_id, distribuidora")
-    .eq("empresa_id", id)
-    .eq("ativa", true)
-    .order("codigo_uc");
-
-  // Buscar station_ids vinculados via uc_stations
+  // Buscar station_ids vinculados via uc_stations (depends on UCs result)
   const ucIds = (ucs ?? []).map((uc) => uc.id);
   const { data: ucStationsRows } = ucIds.length > 0
     ? await supabase.from("uc_stations").select("station_id").in("uc_id", ucIds)

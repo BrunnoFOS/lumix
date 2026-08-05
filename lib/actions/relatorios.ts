@@ -184,6 +184,8 @@ export async function getRelatorios(search?: string, statusEnvio?: string, empre
     query = query.eq("empresa_id", empresaId);
   }
 
+  query = query.limit(500);
+
   const { data, error } = await query;
 
   if (error) return [];

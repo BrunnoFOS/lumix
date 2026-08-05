@@ -282,6 +282,8 @@ export async function getFaturas(search?: string, status?: string, empresaId?: s
     query = query.eq("status", status);
   }
 
+  query = query.limit(500);
+
   const { data, error } = await query;
 
   if (error) return [];

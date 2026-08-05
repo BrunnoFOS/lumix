@@ -23,17 +23,19 @@ export default async function ClienteDashboardPage({ searchParams }: Props) {
     redirect("/login");
   }
 
-  // Buscar UCs uma unica vez, depois passar os IDs para as 3 queries
-  const ucIds = await getUCIdsCliente(profile.empresa_id);
+  // Fetch ucIds and usinasOffline in parallel (both only need empresa_id)
+  const [ucIds, usinasOffline] = await Promise.all([
+    getUCIdsCliente(profile.empresa_id),
+    getUsinasOfflineCliente(profile.empresa_id),
+  ]);
 
-  // Se nenhum mes foi selecionado, usar o ultimo mes com dados
+  // mesSelecionado depends on ucIds
   const mesSelecionado = params.mes || await getUltimoMesComDados(ucIds);
 
-  const [resumo, dadosGeracao, dadosEconomia, usinasOffline] = await Promise.all([
+  const [resumo, dadosGeracao, dadosEconomia] = await Promise.all([
     getResumoGeracaoCliente(profile.empresa_id, mesSelecionado, ucIds),
     getDadosGeracaoCliente(profile.empresa_id, ucIds),
     getEconomiaCliente(profile.empresa_id, ucIds),
-    getUsinasOfflineCliente(profile.empresa_id),
   ]);
 
   // Agrupar dados por mes para o grafico (ultimos 12 meses)

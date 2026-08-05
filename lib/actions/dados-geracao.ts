@@ -35,17 +35,23 @@ export async function getUltimoMesComDados(ucIds: string[]): Promise<string | un
   return data?.[0]?.mes_referencia ?? undefined;
 }
 
-export async function getDadosGeracaoCliente(empresaIds: string | string[], ucIds?: string[]) {
+export async function getDadosGeracaoCliente(empresaIds: string | string[], ucIds?: string[], mesesLimit = 12) {
   const supabase = await createServerClient();
 
   // Usa ucIds se fornecido, senão busca
   const resolvedUcIds = ucIds ?? await getUCIdsCliente(empresaIds);
   if (resolvedUcIds.length === 0) return [];
 
+  // Limit by date range to avoid fetching unbounded history
+  const dataLimite = new Date();
+  dataLimite.setMonth(dataLimite.getMonth() - mesesLimit);
+  const limiteStr = `${dataLimite.getFullYear()}-${String(dataLimite.getMonth() + 1).padStart(2, "0")}-01`;
+
   const { data, error } = await supabase
     .from("dados_geracao")
     .select("id, uc_id, mes_referencia, geracao_kwh, geracao_estimada_kwh, irradiacao_media, performance_ratio, indice_performance")
     .in("uc_id", resolvedUcIds)
+    .gte("mes_referencia", limiteStr)
     .order("mes_referencia", { ascending: false });
 
   if (error) return [];
@@ -162,18 +168,23 @@ export async function getResumoGeracaoCliente(empresaIds: string | string[], mes
   };
 }
 
-export async function getEconomiaCliente(empresaIds: string | string[], ucIds?: string[]) {
+export async function getEconomiaCliente(empresaIds: string | string[], ucIds?: string[], mesesLimit = 12) {
   const supabase = await createServerClient();
 
   // Usa ucIds se fornecido, senao busca
   const resolvedUcIds = ucIds ?? await getUCIdsCliente(empresaIds);
   if (resolvedUcIds.length === 0) return [];
 
+  const dataLimite = new Date();
+  dataLimite.setMonth(dataLimite.getMonth() - mesesLimit);
+  const limiteStr = `${dataLimite.getFullYear()}-${String(dataLimite.getMonth() + 1).padStart(2, "0")}-01`;
+
   const { data, error } = await supabase
     .from("faturas")
     .select("uc_id, mes_referencia, economia_estimada")
     .in("uc_id", resolvedUcIds)
     .not("economia_estimada", "is", null)
+    .gte("mes_referencia", limiteStr)
     .order("mes_referencia", { ascending: false });
 
   if (error) return [];

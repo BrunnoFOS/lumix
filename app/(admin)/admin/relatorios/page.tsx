@@ -73,8 +73,9 @@ async function RelatorioListSection({ search, status }: { search?: string; statu
     source: "database" as const,
   }));
 
+  const dbCodesSet = new Set(dbUcs.map((db) => db.codigo_uc));
   const solisOptions: UCOption[] = solisResult.data
-    .filter((s) => !dbUcs.some((db) => db.codigo_uc === s.station_id))
+    .filter((s) => !dbCodesSet.has(s.station_id))
     .map((s) => ({
       id: `solis:${s.station_id}`,
       codigo_uc: s.station_name,
