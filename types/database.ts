@@ -201,3 +201,13 @@ export interface FaturaProcessadaLog {
   alterado_por: string;
   alterado_em: string;
 }
+
+export interface FaturaLog {
+  id: string;
+  fatura_id: string;
+  campo_alterado: string;
+  valor_anterior: string | null;
+  valor_novo: string | null;
+  alterado_por: string;
+  alterado_em: string;
+}

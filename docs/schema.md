@@ -480,6 +480,31 @@ Log de auditoria para edições em faturas processadas. Registros são imutávei
 
 ---
 
+### `faturas_log`
+
+Log de auditoria para edições em faturas. Registros são imutáveis — sem UPDATE ou DELETE.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | uuid | PK, default gen_random_uuid() | |
+| fatura_id | uuid | FK → faturas.id ON DELETE CASCADE, NOT NULL | Fatura editada |
+| campo_alterado | text | NOT NULL | Nome do campo que foi alterado |
+| valor_anterior | text | nullable | Valor antes da edição (serializado como texto) |
+| valor_novo | text | nullable | Valor após a edição (serializado como texto) |
+| alterado_por | uuid | FK → profiles.id, NOT NULL | Admin que fez a alteração |
+| alterado_em | timestamptz | NOT NULL, default now() | Data/hora da alteração |
+
+**Relationships:**
+- faturas_log.fatura_id → faturas.id
+- faturas_log.alterado_por → profiles.id
+
+**RLS Policies:**
+- SELECT: Apenas admin.
+- INSERT: Apenas admin.
+- UPDATE/DELETE: Nenhum (logs imutáveis).
+
+---
+
 ## Indexes
 
 | Table | Column(s) | Type | Reason |
@@ -503,6 +528,7 @@ Log de auditoria para edições em faturas processadas. Registros são imutávei
 | faturas_processadas | uc_id | btree | Filtro por UC |
 | impostos_concessionaria | concessionaria_sigla, vigencia_inicio, vigencia_fim | btree | Lookup por concessionária + data |
 | faturas_processadas_log | faturas_processadas_id | btree | Busca por fatura processada |
+| faturas_log | fatura_id | btree | Busca por fatura |
 
 ---
 

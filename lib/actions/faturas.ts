@@ -140,44 +140,134 @@ export async function createFatura(formData: FormData): Promise<ActionResult> {
   return { data: { id: data.id } };
 }
 
+const FATURA_EDITABLE_FIELDS = [
+  "denominacao",
+  "contrato",
+  "inicio_ciclo",
+  "fim_ciclo",
+  "energia_faturada_fp",
+  "valor_tarifa_fp",
+  "kwh_compensado_fp",
+  "tarifa_compensada_fp",
+  "energia_consumida_fp",
+  "energia_injetada_fp",
+  "valor_faturado",
+  "valor_total",
+  "consumo_kwh",
+  "energia_injetada_kwh",
+  "creditos_energia_kwh",
+  "economia_estimada",
+  "demanda_contratada_kw",
+  "valor_tusd",
+  "valor_te",
+] as const;
+
+type FaturaEditableField = (typeof FATURA_EDITABLE_FIELDS)[number];
+
 export async function updateFatura(
   id: string,
-  formData: FormData
+  updates: Partial<Record<FaturaEditableField, string | number | null>>
 ): Promise<ActionResult> {
   const supabase = await createServerClient();
 
-  const { error } = await supabase
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  // Fetch current values to generate diff
+  const { data: current, error: fetchError } = await supabase
     .from("faturas")
-    .update({
-      denominacao: str(formData.get("denominacao") as string),
-      contrato: str(formData.get("contrato") as string),
-      valor_faturado: parseDecimal(formData.get("valor_faturado") as string),
-      inicio_ciclo: str(formData.get("inicio_ciclo") as string),
-      fim_ciclo: str(formData.get("fim_ciclo") as string),
-      energia_faturada_fp: parseDecimal(formData.get("energia_faturada_fp") as string),
-      valor_tarifa_fp: parseDecimal(formData.get("valor_tarifa_fp") as string),
-      kwh_compensado_fp: parseDecimal(formData.get("kwh_compensado_fp") as string),
-      tarifa_compensada_fp: parseDecimal(formData.get("tarifa_compensada_fp") as string),
-      energia_consumida_fp: parseDecimal(formData.get("energia_consumida_fp") as string),
-      energia_injetada_fp: parseDecimal(formData.get("energia_injetada_fp") as string),
-      valor_total: parseDecimal(formData.get("valor_total") as string),
-      consumo_kwh: parseDecimal(formData.get("consumo_kwh") as string),
-      energia_injetada_kwh: parseDecimal(formData.get("energia_injetada_kwh") as string),
-      creditos_energia_kwh: parseDecimal(formData.get("creditos_energia_kwh") as string),
-      demanda_contratada_kw: parseDecimal(formData.get("demanda_contratada_kw") as string),
-      valor_tusd: parseDecimal(formData.get("valor_tusd") as string),
-      valor_te: parseDecimal(formData.get("valor_te") as string),
-      economia_estimada: parseDecimal(formData.get("economia_estimada") as string),
-      pdf_url: str(formData.get("pdf_url") as string),
-    })
+    .select(FATURA_EDITABLE_FIELDS.join(", "))
+    .eq("id", id)
+    .single();
+
+  if (fetchError || !current) {
+    return { error: "Fatura não encontrada." };
+  }
+
+  // Build diff entries
+  const logEntries: {
+    fatura_id: string;
+    campo_alterado: string;
+    valor_anterior: string | null;
+    valor_novo: string | null;
+    alterado_por: string;
+  }[] = [];
+
+  const updatePayload: Record<string, unknown> = {};
+
+  for (const field of FATURA_EDITABLE_FIELDS) {
+    if (!(field in updates)) continue;
+
+    const newValue = updates[field];
+    const currentValue = (current as unknown as Record<string, unknown>)[field];
+
+    const currentStr = currentValue == null ? null : String(currentValue);
+    const newStr = newValue == null ? null : String(newValue);
+
+    if (currentStr !== newStr) {
+      logEntries.push({
+        fatura_id: id,
+        campo_alterado: field,
+        valor_anterior: currentStr,
+        valor_novo: newStr,
+        alterado_por: user.id,
+      });
+      updatePayload[field] = newValue;
+    }
+  }
+
+  if (Object.keys(updatePayload).length === 0) {
+    return { error: "Nenhuma alteração detectada." };
+  }
+
+  const { error: updateError } = await supabase
+    .from("faturas")
+    .update(updatePayload)
     .eq("id", id);
 
-  if (error) {
+  if (updateError) {
     return { error: "Erro ao atualizar fatura." };
   }
 
+  // Insert log entries
+  if (logEntries.length > 0) {
+    const { error: logError } = await supabase
+      .from("faturas_log")
+      .insert(logEntries);
+
+    if (logError) {
+      console.error("[updateFatura] Erro ao inserir log:", logError);
+    }
+  }
+
+  revalidatePath(`/admin/faturas/${id}`);
   revalidatePath("/admin/faturas");
-  return {};
+  return { data: { id } };
+}
+
+export async function getFaturaLog(faturaId: string) {
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("faturas_log")
+    .select("id, campo_alterado, valor_anterior, valor_novo, alterado_em, admin:profiles(id, nome)")
+    .eq("fatura_id", faturaId)
+    .order("alterado_em", { ascending: false });
+
+  if (error) return [];
+
+  return data.map((row) => {
+    const adminRaw = row.admin as unknown;
+    const admin = Array.isArray(adminRaw) ? adminRaw[0] ?? null : adminRaw;
+    return { ...row, admin } as {
+      id: string;
+      campo_alterado: string;
+      valor_anterior: string | null;
+      valor_novo: string | null;
+      alterado_em: string;
+      admin: { id: string; nome: string } | null;
+    };
+  });
 }
 
 export async function getFaturas(search?: string, status?: string, empresaId?: string) {
