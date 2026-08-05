@@ -1,10 +1,20 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 
 const WEBHOOK_FATURA_URL =
   "https://n8n-n8n.nt4zcb.easypanel.host/webhook/1f12ba76-a38d-4a8f-9441-db04f017c72f";
+
+/** Agenda callback para rodar após a resposta. Fallback fire-and-forget em ambientes sem request scope (ex: testes). */
+function afterResponse(callback: () => Promise<void>) {
+  try {
+    after(callback);
+  } catch {
+    callback().catch(console.error);
+  }
+}
 
 interface ActionResult {
   error?: string;
@@ -113,13 +123,17 @@ export async function createFatura(formData: FormData): Promise<ActionResult> {
     .eq("id", user?.id ?? "")
     .single();
 
-  await enviarWebhookFatura({
+  const webhookPayload = {
     fatura_id: data.id,
     uc_id,
     mes_referencia,
     arquivo_url: arquivoUrl,
     role: (profile?.role as "admin" | "cliente") ?? "admin",
     user_id: user?.id ?? "",
+  };
+
+  afterResponse(async () => {
+    await enviarWebhookFatura(webhookPayload);
   });
 
   revalidatePath("/admin/faturas");
@@ -302,13 +316,17 @@ export async function createFaturaCliente(formData: FormData): Promise<ActionRes
 
   const arquivoUrl = imagem_url || pdf_url || null;
 
-  await enviarWebhookFatura({
+  const webhookPayload = {
     fatura_id: data.id,
     uc_id,
     mes_referencia,
     arquivo_url: arquivoUrl,
-    role: "cliente",
+    role: "cliente" as const,
     user_id: user?.id ?? "",
+  };
+
+  afterResponse(async () => {
+    await enviarWebhookFatura(webhookPayload);
   });
 
   revalidatePath("/cliente/fatura");
@@ -351,7 +369,7 @@ export async function createFaturaComGeracao(formData: FormData): Promise<Action
     return { error: "Erro ao criar fatura." };
   }
 
-  // Enviar webhook com dados de geração incluídos
+  // Coletar dados do webhook antes de retornar
   const arquivoUrl = str(formData.get("pdf_url") as string) ?? str(formData.get("imagem_url") as string) ?? null;
   const dadosGeracaoRaw = formData.get("dados_geracao") as string;
   const stationId = formData.get("station_id") as string;
@@ -371,31 +389,36 @@ export async function createFaturaComGeracao(formData: FormData): Promise<Action
     .eq("id", user?.id ?? "")
     .single();
 
-  const controller = new AbortController();
-  const webhookTimeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
+  // Enviar webhook após a resposta ser enviada ao cliente (não bloqueia o retorno)
+  const webhookPayload = {
+    fatura_id: data.id,
+    uc_id,
+    mes_referencia,
+    arquivo_url: arquivoUrl,
+    station_id: stationId || null,
+    role: (profile?.role as "admin" | "cliente") ?? "admin",
+    user_id: user?.id ?? "",
+    dados_geracao: dadosGeracao,
+  };
 
-  try {
-    const res = await fetch(WEBHOOK_FATURA_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fatura_id: data.id,
-        uc_id,
-        mes_referencia,
-        arquivo_url: arquivoUrl,
-        station_id: stationId || null,
-        role: (profile?.role as "admin" | "cliente") ?? "admin",
-        user_id: user?.id ?? "",
-        dados_geracao: dadosGeracao,
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(webhookTimeout);
-    console.log("[webhook fatura+geracao]", res.status);
-  } catch (err) {
-    clearTimeout(webhookTimeout);
-    console.error("[webhook fatura+geracao] erro:", err);
-  }
+  afterResponse(async () => {
+    const controller = new AbortController();
+    const webhookTimeout = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const res = await fetch(WEBHOOK_FATURA_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(webhookPayload),
+        signal: controller.signal,
+      });
+      clearTimeout(webhookTimeout);
+      console.log("[webhook fatura+geracao]", res.status);
+    } catch (err) {
+      clearTimeout(webhookTimeout);
+      console.error("[webhook fatura+geracao] erro:", err);
+    }
+  });
 
   revalidatePath("/admin/faturas");
   return { data: { id: data.id } };

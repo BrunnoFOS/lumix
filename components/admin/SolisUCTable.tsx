@@ -97,8 +97,8 @@ export function SolisUCTable({
           <TableHeader>
             <TableRow>
               <TableHead>Usina</TableHead>
-              <TableHead>Localiza\u00e7\u00e3o</TableHead>
-              <TableHead>Pot\u00eancia (kWp)</TableHead>
+              <TableHead>Localização</TableHead>
+              <TableHead>Potência (kWp)</TableHead>
               <TableHead>Inversores</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Tarifa</TableHead>
@@ -157,7 +157,7 @@ export function SolisUCTable({
                         {vinc.subgrupo && <span className="text-muted-foreground"> / {vinc.subgrupo}</span>}
                       </div>
                     ) : (
-                      <span className="text-xs text-muted-foreground">N\u00e3o configurada</span>
+                      <span className="text-xs text-muted-foreground">Não configurada</span>
                     )}
                   </TableCell>
                   <TableCell>
@@ -181,7 +181,7 @@ export function SolisUCTable({
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">
-            {start + 1}\u2013{Math.min(start + PAGE_SIZE, ucs.length)} de {ucs.length}
+            {start + 1}–{Math.min(start + PAGE_SIZE, ucs.length)} de {ucs.length}
           </span>
           <div className="flex items-center gap-1">
             <Button variant="outline" size="icon" className="h-8 w-8" disabled={page === 0} onClick={() => setPage(p => p - 1)}>

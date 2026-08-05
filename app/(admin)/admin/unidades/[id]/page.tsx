@@ -20,7 +20,7 @@ function DetailRow({ label, value }: { label: string; value: string | number | n
       <span className="text-muted-foreground">{label}</span>
       {missing ? (
         <span className="flex items-center gap-1 text-sm text-warning">
-          N\u00e3o informado
+          Não informado
         </span>
       ) : (
         <span>{value}</span>
@@ -53,7 +53,7 @@ export default async function UCDetalhesPage({ params }: Props) {
               </Badge>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              {uc.titular} \u2014{" "}
+              {uc.titular} —{" "}
               <Link
                 href={`/admin/clientes/${uc.empresa?.id}`}
                 className="text-primary hover:underline"
@@ -93,18 +93,18 @@ export default async function UCDetalhesPage({ params }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Dados t\u00e9cnicos</CardTitle>
+          <CardTitle className="text-lg">Dados técnicos</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-3">
-            <DetailRow label="Pot\u00eancia instalada" value={uc.potencia_instalada_kwp ? `${uc.potencia_instalada_kwp} kWp` : null} />
+            <DetailRow label="Potência instalada" value={uc.potencia_instalada_kwp ? `${uc.potencia_instalada_kwp} kWp` : null} />
             <DetailRow label="Qtd. inversores" value={uc.quantidade_inversores} />
             <DetailRow label="Modelo inversores" value={uc.modelo_inversores} />
           </div>
           <div className="space-y-3">
-            <DetailRow label="Pot\u00eancia inversor" value={uc.potencia_inversor_kw ? `${uc.potencia_inversor_kw} kW` : null} />
-            <DetailRow label="Data instala\u00e7\u00e3o" value={uc.data_instalacao ? formatDate(uc.data_instalacao) : null} />
-            <DetailRow label="Gera\u00e7\u00e3o estimada" value={uc.geracao_estimada_mensal_kwh ? `${uc.geracao_estimada_mensal_kwh} kWh/m\u00eas` : null} />
+            <DetailRow label="Potência inversor" value={uc.potencia_inversor_kw ? `${uc.potencia_inversor_kw} kW` : null} />
+            <DetailRow label="Data instalação" value={uc.data_instalacao ? formatDate(uc.data_instalacao) : null} />
+            <DetailRow label="Geração estimada" value={uc.geracao_estimada_mensal_kwh ? `${uc.geracao_estimada_mensal_kwh} kWh/mês` : null} />
           </div>
         </CardContent>
       </Card>
@@ -112,7 +112,7 @@ export default async function UCDetalhesPage({ params }: Props) {
       {uc.observacoes && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Observa\u00e7\u00f5es</CardTitle>
+            <CardTitle className="text-lg">Observações</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">{uc.observacoes}</p>

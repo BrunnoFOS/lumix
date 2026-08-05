@@ -139,7 +139,12 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
 
       if (geracao) formData.set("dados_geracao", JSON.stringify(geracao));
       if (selectedUC?.station_id) formData.set("station_id", selectedUC.station_id);
-      return await createFaturaComGeracao(formData);
+
+      try {
+        return await createFaturaComGeracao(formData);
+      } catch {
+        return { error: "Erro de conexão ao salvar fatura. Tente novamente." };
+      }
     },
     null
   );
@@ -153,7 +158,10 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
       });
       setTimeout(() => {
         router.push("/admin/faturas");
-      }, 5000);
+      }, 1500);
+    }
+    if (state?.error) {
+      toast.error(state.error);
     }
   }, [state, router]);
 

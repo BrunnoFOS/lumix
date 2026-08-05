@@ -20,7 +20,7 @@ function DetailRow({ label, value }: { label: string; value: string | number | n
       {missing ? (
         <span className="flex items-center gap-1 text-sm text-warning">
           <AlertCircle className="h-3.5 w-3.5" />
-          N\u00e3o informado
+          Não informado
         </span>
       ) : (
         <span>{value}</span>
@@ -56,9 +56,9 @@ interface UCDetailSectionsProps {
 }
 
 const enquadramentoLabels: Record<string, string> = {
-  monofasico: "Monof\u00e1sico",
-  bifasico: "Bif\u00e1sico",
-  trifasico: "Trif\u00e1sico",
+  monofasico: "Monofásico",
+  bifasico: "Bifásico",
+  trifasico: "Trifásico",
 };
 
 export function UCDetailSections({ ucId, ucData, opcoesTarifarias }: UCDetailSectionsProps) {
@@ -84,9 +84,9 @@ export function UCDetailSections({ ucId, ucData, opcoesTarifarias }: UCDetailSec
       if (tarifaRef.current?.hasChanges) promises.push(tarifaRef.current.save());
       if (estimativaRef.current?.hasChanges) promises.push(estimativaRef.current.save());
       await Promise.all(promises);
-      toast.success("Todas as altera\u00e7\u00f5es foram salvas!");
+      toast.success("Todas as alterações foram salvas!");
     } catch {
-      toast.error("Erro ao salvar altera\u00e7\u00f5es.");
+      toast.error("Erro ao salvar alterações.");
     } finally {
       setSavingAll(false);
     }
@@ -114,7 +114,7 @@ export function UCDetailSections({ ucId, ucData, opcoesTarifarias }: UCDetailSec
             <CardTitle className="text-lg">Dados da UC</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <DetailRow label="C\u00f3digo UC" value={ucData.codigo_uc} />
+            <DetailRow label="Código UC" value={ucData.codigo_uc} />
             <DetailRow label="Titular" value={ucData.titular} />
             <DetailRow label="Distribuidora" value={ucData.distribuidora} />
             <DetailRow label="Enquadramento" value={enquadramentoLabels[ucData.enquadramento_tarifario]} />
