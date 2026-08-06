@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { getFaturaProcessada, getFaturaProcessadaLog } from "@/lib/actions/faturas-processadas";
 import { FaturaProcessadaDetail } from "@/components/admin/FaturaProcessadaDetail";
 import { FaturaProcessadaEditLog } from "@/components/admin/FaturaProcessadaEditLog";
+import { FaturaProcessadaPDFLayout } from "@/components/admin/FaturaProcessadaPDFLayout";
+import { RegenerarRelatorioButton } from "@/components/admin/RegenerarRelatorioButton";
 import { formatMesReferencia } from "@/lib/utils";
 
 interface Props {
@@ -32,6 +34,13 @@ export default async function FaturaProcessadaDetalhePage({ params }: Props) {
   const uc = fp.uc as { id: string; codigo_uc: string; titular: string; empresa: { id: string; nome: string } | null } | null;
   const statusInfo = STATUS_MAP[fp.status] ?? { label: fp.status, variant: "secondary" as const };
 
+  const detailContent = (
+    <>
+      <FaturaProcessadaDetail fp={fp} editLog={log} />
+      <FaturaProcessadaEditLog log={log} />
+    </>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -51,28 +60,31 @@ export default async function FaturaProcessadaDetalhePage({ params }: Props) {
         </Badge>
       </div>
 
-      {(fp.pdf_fatura_url || fp.pdf_relatorio_url) && (
-        <div className="flex gap-3">
-          {fp.pdf_fatura_url && (
-            <a href={fp.pdf_fatura_url} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted/50 transition-colors">
-              <Download className="h-4 w-4" />
-              Fatura original
-            </a>
-          )}
-          {fp.pdf_relatorio_url && (
-            <a href={fp.pdf_relatorio_url} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted/50 transition-colors">
-              <FileText className="h-4 w-4" />
-              Relatório gerado
-            </a>
-          )}
-        </div>
+      <div className="flex flex-wrap gap-3">
+        {fp.pdf_fatura_url && (
+          <a href={fp.pdf_fatura_url} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted/50 transition-colors">
+            <Download className="h-4 w-4" />
+            Fatura original
+          </a>
+        )}
+        {fp.pdf_relatorio_url && (
+          <a href={fp.pdf_relatorio_url} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted/50 transition-colors">
+            <FileText className="h-4 w-4" />
+            Relatório gerado
+          </a>
+        )}
+        <RegenerarRelatorioButton fpId={fp.id} status={fp.status} />
+      </div>
+
+      {fp.pdf_fatura_url ? (
+        <FaturaProcessadaPDFLayout pdfUrl={fp.pdf_fatura_url}>
+          {detailContent}
+        </FaturaProcessadaPDFLayout>
+      ) : (
+        detailContent
       )}
-
-      <FaturaProcessadaDetail fp={fp} />
-
-      <FaturaProcessadaEditLog log={log} />
     </div>
   );
 }

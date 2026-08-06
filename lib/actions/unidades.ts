@@ -296,6 +296,27 @@ export async function desvincularUC(id: string): Promise<ActionResult> {
   return {};
 }
 
+export async function desvincularStation(
+  ucId: string,
+  stationId: string
+): Promise<ActionResult> {
+  const supabase = await createServerClient();
+
+  const { error } = await supabase
+    .from("uc_stations")
+    .delete()
+    .eq("uc_id", ucId)
+    .eq("station_id", stationId);
+
+  if (error) {
+    return { error: "Erro ao desvincular station." };
+  }
+
+  revalidatePath("/admin/unidades");
+  revalidatePath("/admin/clientes");
+  return {};
+}
+
 export async function toggleUC(
   id: string,
   ativa: boolean
@@ -492,6 +513,46 @@ export async function vincularSolisUC(
     .maybeSingle();
 
   const provider = cacheRow?.provider ?? "solis";
+
+  // Verificar se existe UC arquivada nesta empresa com mesmo nome (re-vinculação)
+  const { data: ucArquivada } = await supabase
+    .from("unidades_consumidoras")
+    .select("id")
+    .eq("empresa_id", empresaId)
+    .eq("codigo_uc", solisData.station_name)
+    .eq("arquivada", true)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (ucArquivada) {
+    // Reativar UC existente em vez de criar duplicata
+    await supabase
+      .from("unidades_consumidoras")
+      .update({
+        ativa: true,
+        arquivada: false,
+        station_id: solisData.station_id,
+        potencia_instalada_kwp: solisData.potencia_instalada_kwp,
+        quantidade_inversores: solisData.qtd_inversores,
+        modelo_inversores: solisData.modelo_inversores.join(", "),
+        potencia_inversor_kw: solisData.potencia_inversor_kw,
+        data_instalacao: solisData.data_instalacao_iso,
+      })
+      .eq("id", ucArquivada.id);
+
+    // Criar vínculo em uc_stations
+    await supabase.from("uc_stations").insert({
+      uc_id: ucArquivada.id,
+      station_id: solisData.station_id,
+      provider,
+    });
+
+    revalidatePath("/admin/clientes");
+    revalidatePath(`/admin/clientes/${empresaId}`);
+    revalidatePath("/admin/unidades");
+    return { data: { id: ucArquivada.id } };
+  }
 
   // Criar nova UC
   let cidade: string | null = null;

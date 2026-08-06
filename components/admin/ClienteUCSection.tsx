@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Zap, Plus, X, Unlink, Loader2, AlertTriangle } from "lucide-react";
+import { Zap, Plus, X, Unlink, Loader2, AlertTriangle, Wifi, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { VincularSolisUC } from "@/components/admin/VincularSolisUC";
-import { desvincularUC } from "@/lib/actions/unidades";
+import { desvincularUC, desvincularStation } from "@/lib/actions/unidades";
 import type { UsinaUC } from "@/lib/actions/solis";
 
 interface UC {
@@ -35,7 +35,12 @@ interface UC {
   distribuidora: string;
   potencia_instalada_kwp: number;
   ativa: boolean;
+  arquivada: boolean;
   station_id: string | null;
+  is_station_adicional?: boolean;
+  station_id_adicional?: string;
+  uc_principal_nome?: string;
+  usina_status?: "online" | "offline" | "alerta" | null;
 }
 
 interface UsinaComProvider extends UsinaUC {
@@ -58,9 +63,18 @@ export function ClienteUCSection({
 
   async function handleConfirmarDesvincular() {
     if (!ucParaDesvincular) return;
-    setDesvinculando(ucParaDesvincular.id);
+    const key = ucParaDesvincular.is_station_adicional
+      ? `${ucParaDesvincular.id}-${ucParaDesvincular.station_id_adicional}`
+      : ucParaDesvincular.id;
+    setDesvinculando(key);
     setUcParaDesvincular(null);
-    await desvincularUC(ucParaDesvincular.id);
+
+    if (ucParaDesvincular.is_station_adicional && ucParaDesvincular.station_id_adicional) {
+      await desvincularStation(ucParaDesvincular.id, ucParaDesvincular.station_id_adicional);
+    } else {
+      await desvincularUC(ucParaDesvincular.id);
+    }
+
     setDesvinculando(null);
     router.refresh();
   }
@@ -70,7 +84,7 @@ export function ClienteUCSection({
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="flex items-center gap-2 text-lg">
           <Zap className="h-5 w-5" />
-          Unidades consumidoras ({unidades.length})
+          Unidades consumidoras ({unidades.filter((u) => !u.is_station_adicional).length})
         </CardTitle>
         {showVincular ? (
           <Button size="sm" variant="outline" onClick={() => setShowVincular(false)}>
@@ -109,46 +123,83 @@ export function ClienteUCSection({
                 <TableHead>Código UC</TableHead>
                 <TableHead>Distribuidora</TableHead>
                 <TableHead>Potência (kWp)</TableHead>
+                <TableHead>Usina</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-12" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {unidades.map((uc) => (
-                <TableRow key={uc.id}>
-                  <TableCell>
-                    <Link
-                      href={`/admin/unidades/${uc.id}`}
-                      className="font-medium hover:text-primary hover:underline"
-                    >
-                      {uc.codigo_uc}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{uc.distribuidora || "—"}</TableCell>
-                  <TableCell>{uc.potencia_instalada_kwp}</TableCell>
-                  <TableCell>
-                    <Badge variant={uc.ativa ? "default" : "outline"}>
-                      {uc.ativa ? "Ativa" : "Inativa"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 text-red-500 hover:bg-red-50 hover:text-red-600"
-                      onClick={() => setUcParaDesvincular(uc)}
-                      disabled={desvinculando === uc.id}
-                      title="Desvincular UC deste cliente"
-                    >
-                      {desvinculando === uc.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Unlink className="h-3.5 w-3.5" />
+              {unidades.map((uc) => {
+                const rowKey = uc.is_station_adicional
+                  ? `${uc.id}-${uc.station_id_adicional}`
+                  : uc.id;
+                return (
+                  <TableRow key={rowKey} className={uc.arquivada ? "opacity-50" : ""}>
+                    <TableCell>
+                      <Link
+                        href={`/admin/unidades/${uc.id}`}
+                        className="font-medium hover:text-primary hover:underline"
+                      >
+                        {uc.codigo_uc}
+                      </Link>
+                      {uc.is_station_adicional && uc.uc_principal_nome && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          Vinculada a: {uc.uc_principal_nome}
+                        </span>
                       )}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell>{uc.distribuidora || "—"}</TableCell>
+                    <TableCell>{uc.potencia_instalada_kwp}</TableCell>
+                    <TableCell>
+                      {uc.usina_status === "online" ? (
+                        <Badge variant="default" className="bg-emerald-500 hover:bg-emerald-600 gap-1">
+                          <Wifi className="h-3 w-3" />
+                          Online
+                        </Badge>
+                      ) : uc.usina_status === "offline" ? (
+                        <Badge variant="destructive" className="gap-1">
+                          <WifiOff className="h-3 w-3" />
+                          Offline
+                        </Badge>
+                      ) : uc.usina_status === "alerta" ? (
+                        <Badge variant="default" className="bg-amber-500 hover:bg-amber-600 gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          Alerta
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {uc.arquivada ? (
+                        <Badge variant="secondary">Arquivada</Badge>
+                      ) : (
+                        <Badge variant={uc.ativa ? "default" : "outline"}>
+                          {uc.ativa ? "Ativa" : "Inativa"}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {!uc.arquivada && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-red-500 hover:bg-red-50 hover:text-red-600"
+                          onClick={() => setUcParaDesvincular(uc)}
+                          disabled={desvinculando === rowKey}
+                          title={uc.is_station_adicional ? "Desvincular station adicional" : "Desvincular UC deste cliente"}
+                        >
+                          {desvinculando === rowKey ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Unlink className="h-3.5 w-3.5" />
+                          )}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         ) : null}
@@ -166,13 +217,15 @@ export function ClienteUCSection({
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <span className="block">
-                Tem certeza que deseja desvincular a UC{" "}
-                <strong className="text-foreground">{ucParaDesvincular?.codigo_uc}</strong>{" "}
-                deste cliente?
+                Tem certeza que deseja desvincular{" "}
+                {ucParaDesvincular?.is_station_adicional ? "a station adicional" : "a UC"}{" "}
+                <strong className="text-foreground">{ucParaDesvincular?.codigo_uc}</strong>
+                {ucParaDesvincular?.is_station_adicional ? "?" : " deste cliente?"}
               </span>
               <span className="block text-xs">
-                A UC será arquivada e os vínculos com usinas de monitoramento serão removidos.
-                Você poderá restaurá-la depois na página de unidades.
+                {ucParaDesvincular?.is_station_adicional
+                  ? "Apenas o vínculo desta station será removido. A UC principal não será afetada."
+                  : "A UC será arquivada e os vínculos com usinas de monitoramento serão removidos. Você poderá restaurá-la depois na página de unidades."}
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
