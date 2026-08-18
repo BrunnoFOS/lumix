@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { Bell } from "lucide-react";
 import { fetchSugestoesPendentes } from "@/lib/actions/sugestoes-vinculacao";
 import { SugestoesPageClient } from "@/components/admin/SugestoesVinculacaoPage";

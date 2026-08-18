@@ -7,7 +7,7 @@ import { classificarDesempenho } from "@/lib/geracao-estimada";
 
 interface ActionResult {
   error?: string;
-  data?: { id: string };
+  data?: { id: string; uc_id?: string; mes_referencia?: string };
 }
 
 function parseDecimal(value: string | null): number | null {
@@ -72,6 +72,7 @@ export async function createRelatorio(formData: FormData): Promise<ActionResult>
   }
 
   revalidatePath("/admin/relatorios");
+  revalidatePath("/admin/faturas");
   return { data: { id: data.id } };
 }
 
@@ -91,6 +92,8 @@ export async function updateRelatorioStatus(
   }
 
   revalidatePath("/admin/relatorios");
+  revalidatePath(`/admin/relatorios/${id}`);
+  revalidatePath("/admin/faturas");
   return {};
 }
 
@@ -118,6 +121,8 @@ export async function arquivarRelatorio(id: string): Promise<ActionResult> {
   }
 
   revalidatePath("/admin/relatorios");
+  revalidatePath(`/admin/relatorios/${id}`);
+  revalidatePath("/admin/faturas");
   return {};
 }
 
@@ -134,6 +139,8 @@ export async function desarquivarRelatorio(id: string): Promise<ActionResult> {
   }
 
   revalidatePath("/admin/relatorios");
+  revalidatePath(`/admin/relatorios/${id}`);
+  revalidatePath("/admin/faturas");
   return {};
 }
 
@@ -164,6 +171,8 @@ export async function updateRelatorioAnexo(
   }
 
   revalidatePath("/admin/relatorios");
+  revalidatePath(`/admin/relatorios/${id}`);
+  revalidatePath("/admin/faturas");
   return {};
 }
 
@@ -284,19 +293,16 @@ export async function criarRelatorioComAnexo(formData: FormData): Promise<Action
     return { error: "Anexo da fatura é obrigatório." };
   }
 
-  // Buscar código da UC para o título
+  // Buscar dados da UC (código + station_id para o N8N)
   const { data: uc } = await supabase
     .from("unidades_consumidoras")
-    .select("codigo_uc")
+    .select("codigo_uc, station_id")
     .eq("id", uc_id)
     .single();
 
   if (!uc) {
     return { error: "UC não encontrada." };
   }
-
-  const mesDate = new Date(mes_referencia + "T00:00:00");
-  const mesNome = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(mesDate);
 
   // Tentar calcular geração estimada automaticamente
   let geracao_estimada_kwh: number | null = null;
@@ -305,39 +311,43 @@ export async function criarRelatorioComAnexo(formData: FormData): Promise<Action
     geracao_estimada_kwh = estimativa.data.geracao_estimada_kwh;
   }
 
-  const { data, error } = await supabase
-    .from("relatorios")
-    .insert({
-      uc_id,
-      empresa_id,
-      mes_referencia,
-      titulo: `Relatório ${mesNome} - ${uc.codigo_uc}`,
-      pdf_url,
-      geracao_estimada_kwh,
-      status_envio: "pendente",
-      gerado_por: "manual",
-      tipo_relatorio: "real",
-    })
+  // Criar/atualizar fatura (a fatura é o documento enviado pelo admin)
+  // O N8N vai processar essa fatura e criar o relatório com o PDF gerado
+  const { data: fatura, error } = await supabase
+    .from("faturas")
+    .upsert(
+      {
+        uc_id,
+        mes_referencia,
+        pdf_url,
+        status: "pendente",
+        inserido_por: (await supabase.auth.getUser()).data.user?.id ?? null,
+      },
+      { onConflict: "uc_id,mes_referencia" }
+    )
     .select("id")
     .single();
 
   if (error) {
-    return { error: "Erro ao criar relatório." };
+    return { error: "Erro ao salvar fatura." };
   }
 
-  // Enviar ao N8N com arquivo_url obrigatório
+  // Enviar ao N8N — ele processa a fatura e cria o relatório
   const n8nUser = process.env.N8N_API_USER;
   const n8nPassword = process.env.N8N_API_PASSWORD;
 
   if (n8nUser && n8nPassword) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000); // 15s — relatório já criado no banco
+    const timeout = setTimeout(() => controller.abort(), 15000);
 
     try {
       const credentials = Buffer.from(`${n8nUser}:${n8nPassword}`).toString("base64");
 
+      const n8nWebhookRelatorio = process.env.N8N_WEBHOOK_GERAR_RELATORIO ??
+        "https://n8n-n8n.nt4zcb.easypanel.host/webhook/7d6333a5-5c73-4be8-a3e3-937238d4f3a8";
+
       await fetch(
-        "https://n8n-n8n.nt4zcb.easypanel.host/webhook/7d6333a5-5c73-4be8-a3e3-937238d4f3a8",
+        n8nWebhookRelatorio,
         {
           method: "POST",
           headers: {
@@ -345,12 +355,14 @@ export async function criarRelatorioComAnexo(formData: FormData): Promise<Action
             Authorization: `Basic ${credentials}`,
           },
           body: JSON.stringify({
-            relatorio_id: data.id,
+            relatorio_id: fatura.id,
+            fatura_id: fatura.id,
             uc_id,
             empresa_id,
             mes_referencia,
             arquivo_url: pdf_url,
             codigo_uc: uc.codigo_uc,
+            station_id: uc.station_id,
             geracao_estimada_kwh,
             comentario_admin: comentarioAdmin || null,
             tipo_relatorio: "real",
@@ -362,10 +374,26 @@ export async function criarRelatorioComAnexo(formData: FormData): Promise<Action
       clearTimeout(timeout);
     } catch {
       clearTimeout(timeout);
-      // Relatório já criado no banco — N8N processará depois se necessário
+      // Fatura salva no banco — N8N processará quando disponível
     }
   }
 
   revalidatePath("/admin/relatorios");
-  return { data: { id: data.id } };
+  revalidatePath("/admin/faturas");
+  return { data: { id: fatura.id, uc_id, mes_referencia } };
+}
+
+export async function checkRelatorioGerado(ucId: string, mesReferencia: string): Promise<boolean> {
+  const supabase = await createServerClient();
+
+  const { data } = await supabase
+    .from("relatorios")
+    .select("id")
+    .eq("uc_id", ucId)
+    .eq("mes_referencia", mesReferencia)
+    .eq("gerado_por", "automatico")
+    .limit(1)
+    .maybeSingle();
+
+  return !!data;
 }

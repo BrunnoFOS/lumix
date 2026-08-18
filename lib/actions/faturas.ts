@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 
 const WEBHOOK_FATURA_URL =
+  process.env.N8N_WEBHOOK_FATURA_URL ??
   "https://n8n-n8n.nt4zcb.easypanel.host/webhook/1f12ba76-a38d-4a8f-9441-db04f017c72f";
 
 /** Agenda callback para rodar após a resposta. Fallback fire-and-forget em ambientes sem request scope (ex: testes). */
@@ -40,10 +41,8 @@ async function enviarWebhookFatura(payload: {
       signal: controller.signal,
     });
     clearTimeout(timeout);
-    console.log("[webhook fatura]", res.status, await res.text());
-  } catch (err) {
+  } catch {
     clearTimeout(timeout);
-    console.error("[webhook fatura] erro:", err);
   }
 }
 
@@ -58,16 +57,12 @@ function str(value: string | null): string | null {
 }
 
 export async function createFatura(formData: FormData): Promise<ActionResult> {
-  console.log("[createFatura] CHAMADA RECEBIDA");
-  console.log("[createFatura] pdf_url:", formData.get("pdf_url"));
-  console.log("[createFatura] imagem_url:", formData.get("imagem_url"));
   const supabase = await createServerClient();
 
   const uc_id = formData.get("uc_id") as string;
   const mes_referencia = formData.get("mes_referencia") as string;
 
   if (!uc_id || !mes_referencia) {
-    console.log("[createFatura] ERRO: campos obrigatórios ausentes");
     return { error: "UC e mês de referência são obrigatórios." };
   }
 
@@ -107,13 +102,11 @@ export async function createFatura(formData: FormData): Promise<ActionResult> {
     .single();
 
   if (error) {
-    console.log("[createFatura] ERRO insert:", error.code, error.message);
     if (error.code === "23505") {
       return { error: "Já existe fatura para esta UC neste mês de referência." };
     }
     return { error: "Erro ao criar fatura." };
   }
-  console.log("[createFatura] INSERT OK, id:", data.id);
 
   const arquivoUrl = str(formData.get("pdf_url") as string) ?? str(formData.get("imagem_url") as string) ?? null;
 
@@ -236,7 +229,7 @@ export async function updateFatura(
       .insert(logEntries);
 
     if (logError) {
-      console.error("[updateFatura] Erro ao inserir log:", logError);
+      // Log error silenciado em producao — faturas_log e best-effort
     }
   }
 
@@ -505,10 +498,8 @@ export async function createFaturaComGeracao(formData: FormData): Promise<Action
         signal: controller.signal,
       });
       clearTimeout(webhookTimeout);
-      console.log("[webhook fatura+geracao]", res.status);
-    } catch (err) {
+    } catch {
       clearTimeout(webhookTimeout);
-      console.error("[webhook fatura+geracao] erro:", err);
     }
   });
 

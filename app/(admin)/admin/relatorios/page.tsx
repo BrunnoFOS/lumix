@@ -11,6 +11,8 @@ import type { UCOption } from "@/lib/actions/solis";
 import { getUCsComStations } from "@/lib/actions/unidades";
 import { getEmpresas } from "@/lib/actions/empresas";
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   searchParams: Promise<{ search?: string; status?: string }>;
 }

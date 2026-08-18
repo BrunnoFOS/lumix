@@ -226,7 +226,7 @@ export async function updateFaturaProcessada(
       .insert(logEntries);
 
     if (logError) {
-      console.error("[updateFaturaProcessada] Erro ao inserir log:", logError);
+      // Log error silenciado em producao — faturas_processadas_log e best-effort
     }
   }
 

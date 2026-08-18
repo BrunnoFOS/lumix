@@ -24,7 +24,7 @@ export function useCEPLookup() {
     setError(null);
 
     try {
-      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`, { cache: "no-store" });
       if (!res.ok) {
         setError("CEP não encontrado.");
         return null;

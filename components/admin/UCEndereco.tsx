@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Save, MapPin, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { updateUCLocalizacao } from "@/lib/actions/unidades";
 import { useCidadesGHI } from "@/hooks/use-cidades-ghi";
-import type { UCSectionHandle } from "@/types/uc-section";
 
 const ESTADOS = [
   "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG",
@@ -24,10 +23,9 @@ interface Props {
     cidade: string | null;
     estado: string | null;
   };
-  onChangeStatus?: () => void;
 }
 
-export const UCEndereco = forwardRef<UCSectionHandle, Props>(function UCEndereco({ ucId, initial, onChangeStatus }, ref) {
+export function UCEndereco({ ucId, initial }: Props) {
   const router = useRouter();
 
   const [endereco, setEndereco] = useState(initial.endereco ?? "");
@@ -46,15 +44,6 @@ export const UCEndereco = forwardRef<UCSectionHandle, Props>(function UCEndereco
     estado !== (initial.estado ?? "");
 
   const isMissingLocation = !cidade || !estado;
-
-  useImperativeHandle(ref, () => ({
-    save: handleSave,
-    hasChanges,
-  }), [hasChanges]);
-
-  useEffect(() => {
-    onChangeStatus?.();
-  }, [hasChanges, onChangeStatus]);
 
   async function handleSave() {
     setSaving(true);
@@ -165,4 +154,4 @@ export const UCEndereco = forwardRef<UCSectionHandle, Props>(function UCEndereco
       </CardContent>
     </Card>
   );
-});
+}

@@ -87,7 +87,7 @@ export async function confirmarSugestao(sugestaoId: string): Promise<ActionResul
   // Buscar a sugestão
   const { data: sugestao, error: fetchErr } = await supabase
     .from("sugestoes_vinculacao")
-    .select("station_id, provider, uc_id")
+    .select("station_id, provider, uc_id, empresa_id")
     .eq("id", sugestaoId)
     .single();
 
@@ -165,7 +165,8 @@ export async function confirmarSugestao(sugestaoId: string): Promise<ActionResul
 
   revalidatePath("/admin/sugestoes-vinculacao");
   revalidatePath("/admin/unidades");
-  revalidatePath("/admin/clientes");
+  revalidatePath(`/admin/unidades/${sugestao.uc_id}`);
+  revalidatePath("/admin/clientes", "layout");
   return {};
 }
 

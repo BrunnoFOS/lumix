@@ -3,6 +3,8 @@ import { getTarifasAneel } from "@/lib/actions/tarifas-aneel";
 import { TarifaSearch } from "@/components/admin/TarifaSearch";
 import { TarifaPageClient } from "@/components/admin/TarifaPageClient";
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   searchParams: Promise<{ sigla?: string; vigencia?: string }>;
 }

@@ -94,7 +94,6 @@ export async function fetchAlertas(): Promise<AlertasResponse> {
 
     return { summary, items };
   } catch (err) {
-    console.error("[alertas] erro:", err);
     return { summary: null, items: [], error: String(err) };
   }
 }

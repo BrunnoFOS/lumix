@@ -4,6 +4,8 @@ import { getRelatoriosCliente } from "@/lib/actions/relatorios";
 import { getUCsCliente } from "@/lib/actions/dados-geracao";
 import { RelatorioList } from "@/components/cliente/RelatorioList";
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   searchParams: Promise<{ [key: string]: string | undefined }>;
 }

@@ -8,6 +8,8 @@ import { EconomiaChartLazy } from "@/components/cliente/EconomiaChartLazy";
 import { DashboardPeriodFilter } from "@/components/cliente/DashboardPeriodFilter";
 import { UsinasOfflineBanner } from "@/components/cliente/UsinasOfflineBanner";
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   searchParams: Promise<{ mes?: string }>;
 }

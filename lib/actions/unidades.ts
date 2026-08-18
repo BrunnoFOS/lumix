@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
+import { normalizarNomeMunicipio } from "@/lib/geracao-estimada";
 import type { EnquadramentoTarifario, ModalidadeTarifaria } from "@/types/database";
 
 interface ActionResult {
@@ -76,6 +77,7 @@ export async function createUC(formData: FormData): Promise<ActionResult> {
   }
 
   revalidatePath("/admin/unidades");
+  revalidatePath(`/admin/clientes/${empresa_id}`);
   return { data: { id: data.id } };
 }
 
@@ -292,7 +294,7 @@ export async function desvincularUC(id: string): Promise<ActionResult> {
   }
 
   revalidatePath("/admin/unidades");
-  revalidatePath("/admin/clientes");
+  revalidatePath("/admin/clientes", "layout");
   return {};
 }
 
@@ -313,7 +315,7 @@ export async function desvincularStation(
   }
 
   revalidatePath("/admin/unidades");
-  revalidatePath("/admin/clientes");
+  revalidatePath("/admin/clientes", "layout");
   return {};
 }
 
@@ -334,6 +336,7 @@ export async function toggleUC(
 
   revalidatePath("/admin/unidades");
   revalidatePath(`/admin/unidades/${id}`);
+  revalidatePath("/admin/clientes", "layout");
   return {};
 }
 
@@ -354,6 +357,7 @@ export async function arquivarUC(
 
   revalidatePath("/admin/unidades");
   revalidatePath(`/admin/unidades/${id}`);
+  revalidatePath("/admin/clientes", "layout");
   return {};
 }
 
@@ -660,7 +664,7 @@ export async function vincularStationAUC(
   }
 
   revalidatePath("/admin/unidades");
-  revalidatePath("/admin/clientes");
+  revalidatePath("/admin/clientes", "layout");
   return {};
 }
 
@@ -678,9 +682,43 @@ export async function getCidadesGHI(uf: string): Promise<string[]> {
 
   if (error || !data) return [];
 
-  // Capitalizar cada palavra para exibição (tabela armazena lowercase sem acentos)
-  return data.map((row) =>
-    row.nome
+  const ghiNomes = data.map((row) => row.nome);
+
+  // Tentar buscar nomes com acentos corretos via API do IBGE
+  try {
+    const ufUpper = uf.toUpperCase();
+    const res = await fetch(
+      `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${ufUpper}/municipios?orderBy=nome`,
+      { next: { revalidate: 86400 } } // cache 24h
+    );
+
+    if (res.ok) {
+      const municipios: Array<{ nome: string }> = await res.json();
+
+      // Criar mapa: nome normalizado (sem acentos, lowercase) -> nome IBGE (com acentos)
+      const ibgeMap = new Map<string, string>();
+      for (const m of municipios) {
+        ibgeMap.set(normalizarNomeMunicipio(m.nome), m.nome);
+      }
+
+      // Para cada cidade no GHI, buscar o nome acentuado do IBGE
+      return ghiNomes.map((ghiNome) => {
+        const nomeIbge = ibgeMap.get(ghiNome);
+        if (nomeIbge) return nomeIbge;
+        // Fallback: capitalizar sem acentos
+        return ghiNome
+          .split(" ")
+          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ");
+      });
+    }
+  } catch {
+    // IBGE indisponível — fallback abaixo
+  }
+
+  // Fallback: capitalizar cada palavra (sem acentos)
+  return ghiNomes.map((nome) =>
+    nome
       .split(" ")
       .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
       .join(" ")

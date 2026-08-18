@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Zap, Save, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,8 +16,6 @@ import {
   type TarifaOpcoes,
   type TarifaLookupResult,
 } from "@/lib/actions/tarifas-aneel";
-import type { UCSectionHandle } from "@/types/uc-section";
-
 const GRUPOS = [
   { value: "grupo_a", label: "Grupo A (Alta tensão)" },
   { value: "grupo_b", label: "Grupo B (Baixa tensão)" },
@@ -40,10 +38,9 @@ interface Props {
     cofins_aliquota: number | null;
   };
   opcoesTarifarias: TarifaOpcoes;
-  onChangeStatus?: () => void;
 }
 
-export const UCClassificacaoTarifaria = forwardRef<UCSectionHandle, Props>(function UCClassificacaoTarifaria({ ucId, initial, opcoesTarifarias, onChangeStatus }, ref) {
+export function UCClassificacaoTarifaria({ ucId, initial, opcoesTarifarias }: Props) {
   const router = useRouter();
 
   const [grupo, setGrupo] = useState(initial.grupo_tarifario ?? "");
@@ -146,15 +143,6 @@ export const UCClassificacaoTarifaria = forwardRef<UCSectionHandle, Props>(funct
     icms !== (initial.icms_aliquota != null ? (initial.icms_aliquota * 100).toFixed(2) : "") ||
     pis !== (initial.pis_aliquota != null ? (initial.pis_aliquota * 100).toFixed(2) : "") ||
     cofins !== (initial.cofins_aliquota != null ? (initial.cofins_aliquota * 100).toFixed(2) : "");
-
-  useImperativeHandle(ref, () => ({
-    save: handleSave,
-    hasChanges,
-  }), [hasChanges]);
-
-  useEffect(() => {
-    onChangeStatus?.();
-  }, [hasChanges, onChangeStatus]);
 
   return (
     <Card className="overflow-visible">
@@ -351,4 +339,4 @@ export const UCClassificacaoTarifaria = forwardRef<UCSectionHandle, Props>(funct
       </CardContent>
     </Card>
   );
-});
+}

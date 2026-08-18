@@ -5,6 +5,8 @@ import { ClienteTable } from "@/components/admin/ClienteTable";
 import { ClienteSearch } from "@/components/admin/ClienteSearch";
 import { getEmpresas } from "@/lib/actions/empresas";
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   searchParams: Promise<{ search?: string; status?: string }>;
 }

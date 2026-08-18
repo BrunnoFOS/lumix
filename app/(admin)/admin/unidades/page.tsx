@@ -10,6 +10,8 @@ import { SyncUCsButton } from "@/components/admin/SyncUCsButton";
 
 import type { UsinaUC } from "@/lib/actions/solis";
 
+export const dynamic = "force-dynamic";
+
 function filterUCs(
   ucs: UsinaUC[],
   params: { search?: string; empresa?: string; vinculacao?: string; tarifa?: string },

@@ -70,7 +70,6 @@ export async function importarTarifasAneel(
     });
 
     if (error) {
-      console.error("[tarifas-aneel] erro RPC:", error);
       return {
         error: `Erro ao importar: ${error.message}`,
         inseridos,

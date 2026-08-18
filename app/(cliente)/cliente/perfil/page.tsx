@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { redirect } from "next/navigation";
 import { getCurrentProfile } from "@/lib/actions/profile";
 import { getUCsCliente } from "@/lib/actions/dados-geracao";

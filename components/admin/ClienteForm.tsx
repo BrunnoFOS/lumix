@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { createEmpresa, updateEmpresa } from "@/lib/actions/empresas";
+import { formatCNPJ } from "@/lib/utils";
 import { useCNPJLookup } from "@/hooks/use-cnpj-lookup";
 import { useCEPLookup } from "@/hooks/use-cep-lookup";
 import { useCidades } from "@/hooks/use-cidades";
@@ -36,6 +37,7 @@ export function ClienteForm({ empresa }: ClienteFormProps) {
   const isEditing = !!empresa;
   const formRef = useRef<HTMLFormElement>(null);
 
+  const [cnpj, setCnpj] = useState(empresa?.cnpj ?? "");
   const [nome, setNome] = useState(empresa?.nome ?? "");
   const [endereco, setEndereco] = useState(empresa?.endereco ?? "");
   const [cidade, setCidade] = useState(empresa?.cidade ?? "");
@@ -66,8 +68,13 @@ export function ClienteForm({ empresa }: ClienteFormProps) {
     }
   }, [state, router, isEditing, empresa?.id]);
 
-  async function handleCNPJBlur(cnpj: string) {
-    const digits = cnpj.replace(/\D/g, "");
+  async function handleCNPJBlur(value: string) {
+    const digits = value.replace(/\D/g, "");
+    // Auto-formatar visualmente se tem 14 dígitos
+    if (digits.length === 14) {
+      setCnpj(formatCNPJ(digits));
+    }
+
     if (digits.length !== 14) return;
 
     const data = await cnpjLookup.lookup(digits);
@@ -114,8 +121,9 @@ export function ClienteForm({ empresa }: ClienteFormProps) {
                 <Input
                   id="cnpj"
                   name="cnpj"
-                  placeholder="00.000.000/0000-00"
-                  defaultValue={empresa?.cnpj}
+                  placeholder="CNPJ (apenas números)"
+                  value={cnpj}
+                  onChange={(e) => setCnpj(e.target.value)}
                   required
                   onBlur={(e) => handleCNPJBlur(e.target.value)}
                 />

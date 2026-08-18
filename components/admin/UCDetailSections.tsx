@@ -1,15 +1,10 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
-import { Loader2, Save } from "lucide-react";
 import { AlertCircle } from "lucide-react";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UCEndereco } from "@/components/admin/UCEndereco";
 import { UCClassificacaoTarifaria } from "@/components/admin/UCClassificacaoTarifaria";
 import { UCParametrosEstimativa } from "@/components/admin/UCParametrosEstimativa";
-import type { UCSectionHandle } from "@/types/uc-section";
 import type { TarifaOpcoes } from "@/lib/actions/tarifas-aneel";
 
 function DetailRow({ label, value }: { label: string; value: string | number | null | undefined }) {
@@ -62,52 +57,8 @@ const enquadramentoLabels: Record<string, string> = {
 };
 
 export function UCDetailSections({ ucId, ucData, opcoesTarifarias }: UCDetailSectionsProps) {
-  const enderecoRef = useRef<UCSectionHandle>(null);
-  const tarifaRef = useRef<UCSectionHandle>(null);
-  const estimativaRef = useRef<UCSectionHandle>(null);
-
-  const [savingAll, setSavingAll] = useState(false);
-  // Force re-render when children change status
-  const [, setTick] = useState(0);
-  const notifyChange = useCallback(() => setTick((t) => t + 1), []);
-
-  const anyChanges =
-    enderecoRef.current?.hasChanges ||
-    tarifaRef.current?.hasChanges ||
-    estimativaRef.current?.hasChanges;
-
-  async function handleSaveAll() {
-    setSavingAll(true);
-    try {
-      const promises: Promise<void>[] = [];
-      if (enderecoRef.current?.hasChanges) promises.push(enderecoRef.current.save());
-      if (tarifaRef.current?.hasChanges) promises.push(tarifaRef.current.save());
-      if (estimativaRef.current?.hasChanges) promises.push(estimativaRef.current.save());
-      await Promise.all(promises);
-      toast.success("Todas as alterações foram salvas!");
-    } catch {
-      toast.error("Erro ao salvar alterações.");
-    } finally {
-      setSavingAll(false);
-    }
-  }
-
   return (
     <>
-      <div className="flex justify-end">
-        <Button
-          disabled={!anyChanges || savingAll}
-          onClick={handleSaveAll}
-        >
-          {savingAll ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="mr-2 h-4 w-4" />
-          )}
-          Salvar tudo
-        </Button>
-      </div>
-
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -122,19 +73,16 @@ export function UCDetailSections({ ucId, ucData, opcoesTarifarias }: UCDetailSec
         </Card>
 
         <UCEndereco
-          ref={enderecoRef}
           ucId={ucId}
           initial={{
             endereco: ucData.endereco,
             cidade: ucData.cidade,
             estado: ucData.estado,
           }}
-          onChangeStatus={notifyChange}
         />
       </div>
 
       <UCClassificacaoTarifaria
-        ref={tarifaRef}
         ucId={ucId}
         initial={{
           grupo_tarifario: ucData.grupo_tarifario,
@@ -147,11 +95,9 @@ export function UCDetailSections({ ucId, ucData, opcoesTarifarias }: UCDetailSec
           cofins_aliquota: ucData.cofins_aliquota,
         }}
         opcoesTarifarias={opcoesTarifarias}
-        onChangeStatus={notifyChange}
       />
 
       <UCParametrosEstimativa
-        ref={estimativaRef}
         ucId={ucId}
         initial={{
           data_inicio_degradacao: ucData.data_inicio_degradacao,
@@ -159,7 +105,6 @@ export function UCDetailSections({ ucId, ucData, opcoesTarifarias }: UCDetailSec
           degradacao_ano_zero: ucData.degradacao_ano_zero,
           degradacao_anos_seguintes: ucData.degradacao_anos_seguintes,
         }}
-        onChangeStatus={notifyChange}
       />
     </>
   );

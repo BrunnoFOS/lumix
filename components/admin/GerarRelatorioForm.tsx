@@ -28,7 +28,7 @@ export function GerarRelatorioForm({
   onCancel,
 }: {
   ucs: UC[];
-  onSuccess: () => void;
+  onSuccess: (info: { uc_id: string; mes_referencia: string }) => void;
   onCancel: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -168,7 +168,10 @@ export function GerarRelatorioForm({
         return;
       }
 
-      onSuccess();
+      onSuccess({
+        uc_id: result.data?.uc_id ?? ucId,
+        mes_referencia: result.data?.mes_referencia ?? mesReferencia,
+      });
     } catch {
       setError("Erro inesperado. Tente novamente.");
     } finally {

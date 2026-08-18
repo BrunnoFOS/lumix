@@ -2,6 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 
+// ——— URLs de webhook N8N ———
+
+const N8N_BASE = process.env.N8N_WEBHOOK_BASE_URL ?? "https://n8n-n8n.nt4zcb.easypanel.host/webhook";
+const WEBHOOK_SYNC_SUNGROW = `${N8N_BASE}/botao_update_uc`;
+const WEBHOOK_SYNC_SOLIS = `${N8N_BASE}/botao_update_uc_solis`;
+const WEBHOOK_GERACAO_SOLIS = `${N8N_BASE}/solis-geracao-mensal`;
+const WEBHOOK_GERAR_RELATORIO = process.env.N8N_WEBHOOK_GERAR_RELATORIO ?? `${N8N_BASE}/7d6333a5-5c73-4be8-a3e3-937238d4f3a8`;
+
 // ——— Sincronização manual de UCs via webhook N8N ———
 
 export async function triggerSyncUCs(): Promise<{ success?: boolean; error?: string }> {
@@ -24,14 +32,14 @@ export async function triggerSyncUCs(): Promise<{ success?: boolean; error?: str
     const body = JSON.stringify({});
 
     const [res1, res2] = await Promise.all([
-      fetch("https://n8n-n8n.nt4zcb.easypanel.host/webhook/botao_update_uc", {
+      fetch(WEBHOOK_SYNC_SUNGROW, {
         method: "POST",
         headers,
         body,
         cache: "no-store",
         signal: controller.signal,
       }),
-      fetch("https://n8n-n8n.nt4zcb.easypanel.host/webhook/botao_update_uc_solis", {
+      fetch(WEBHOOK_SYNC_SOLIS, {
         method: "POST",
         headers,
         body,
@@ -124,7 +132,7 @@ export async function fetchSolisGeracaoMensal(
 
   try {
     const credentials = Buffer.from(`${user}:${password}`).toString("base64");
-    let url = `https://n8n-n8n.nt4zcb.easypanel.host/webhook/solis-geracao-mensal?month=${month}&station_id=${stationId}`;
+    let url = `${WEBHOOK_GERACAO_SOLIS}?month=${month}&station_id=${stationId}`;
     if (dataInicio && dataFim) {
       url += `&data_inicio=${dataInicio}&data_fim=${dataFim}`;
     }
@@ -286,8 +294,7 @@ export async function fetchSungrowUCs(): Promise<{
 
 // ——— Geração mensal SunGrow ———
 
-const WEBHOOK_GERACAO_SUNGROW =
-  "https://n8n-n8n.nt4zcb.easypanel.host/webhook/geracao-mensal-sungrow";
+const WEBHOOK_GERACAO_SUNGROW = `${N8N_BASE}/geracao-mensal-sungrow`;
 
 function formatDateBR(dateStr: string): string {
   if (!dateStr) return "";
@@ -898,6 +905,10 @@ export async function gerarRelatorioSolis(
         },
         { onConflict: "uc_id,mes_referencia" }
       );
+
+    // Revalidar dashboards após atualização de dados de geração
+    revalidatePath("/admin/dashboard");
+    revalidatePath("/cliente/dashboard");
   }
 
   const relController = new AbortController();
@@ -907,7 +918,7 @@ export async function gerarRelatorioSolis(
     const credentials = Buffer.from(`${user}:${password}`).toString("base64");
 
     const res = await fetch(
-      "https://n8n-n8n.nt4zcb.easypanel.host/webhook/7d6333a5-5c73-4be8-a3e3-937238d4f3a8",
+      WEBHOOK_GERAR_RELATORIO,
       {
         method: "POST",
         headers: {

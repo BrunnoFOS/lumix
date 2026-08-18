@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { AlertaList } from "@/components/admin/AlertaList";
 
 export default function AlertasPage() {

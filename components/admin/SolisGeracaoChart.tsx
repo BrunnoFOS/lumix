@@ -32,15 +32,15 @@ export function SolisGeracaoChart({ chartData, mediaDiaria }: Props) {
     <div className="h-80">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis
             dataKey="dia"
-            tick={{ fontSize: 11, fill: "#6B7280" }}
+            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
             tickLine={false}
-            axisLine={{ stroke: "#E5E7EB" }}
+            axisLine={{ stroke: "var(--border)" }}
           />
           <YAxis
-            tick={{ fontSize: 11, fill: "#6B7280" }}
+            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
             tickLine={false}
             axisLine={false}
             tickFormatter={(v) => `${v}`}
@@ -48,7 +48,7 @@ export function SolisGeracaoChart({ chartData, mediaDiaria }: Props) {
           <Tooltip
             contentStyle={{
               borderRadius: 8,
-              border: "1px solid #E5E7EB",
+              border: "1px solid var(--border)",
               fontSize: 13,
             }}
             formatter={(value, name) => {
@@ -59,13 +59,13 @@ export function SolisGeracaoChart({ chartData, mediaDiaria }: Props) {
           />
           <ReferenceLine
             y={mediaDiaria}
-            stroke="#F97316"
+            stroke="var(--primary)"
             strokeDasharray="6 3"
             strokeWidth={1.5}
             label={{
               value: `Media: ${formatKwh(mediaDiaria)}`,
               position: "insideTopRight",
-              fill: "#F97316",
+              fill: "var(--primary)",
               fontSize: 11,
             }}
           />
@@ -73,7 +73,7 @@ export function SolisGeracaoChart({ chartData, mediaDiaria }: Props) {
             {chartData.map((entry, i) => (
               <Cell
                 key={i}
-                fill={entry.pr < 1 ? "#EF4444" : entry.pr >= 2 ? "#10B981" : "#F59E0B"}
+                fill={entry.pr < 1 ? "var(--color-error)" : entry.pr >= 2 ? "var(--color-success)" : "var(--color-warning)"}
               />
             ))}
           </Bar>

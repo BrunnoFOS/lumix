@@ -7,6 +7,8 @@ import { getFaturas } from "@/lib/actions/faturas";
 import { getEmpresas } from "@/lib/actions/empresas";
 import { createServerClient } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   searchParams: Promise<{ search?: string; status?: string; empresa?: string }>;
 }

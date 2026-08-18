@@ -29,7 +29,7 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
   return (
     <div className="rounded-lg border border-border bg-white p-3 shadow-md">
       <p className="mb-1 text-sm font-medium text-foreground">{label}</p>
-      <p className="text-sm" style={{ color: "#10B981" }}>
+      <p className="text-sm" style={{ color: "var(--color-success)" }}>
         Economia: {formatCurrency(payload[0].value)}
       </p>
     </div>
@@ -71,23 +71,23 @@ export function EconomiaChart({ dados }: { dados: DadoEconomia[] }) {
       <CardContent>
         <ResponsiveContainer width="100%" height={320}>
           <BarChart data={chartData} barGap={4}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis
               dataKey="mes"
               tick={{ fontSize: 12 }}
               tickLine={false}
-              axisLine={{ stroke: "#E5E7EB" }}
+              axisLine={{ stroke: "var(--border)" }}
             />
             <YAxis
               tick={{ fontSize: 12 }}
               tickLine={false}
-              axisLine={{ stroke: "#E5E7EB" }}
+              axisLine={{ stroke: "var(--border)" }}
               tickFormatter={(v) => `R$ ${v.toLocaleString("pt-BR")}`}
             />
             <Tooltip content={<CustomTooltip />} />
             <Bar
               dataKey="Economia"
-              fill="#10B981"
+              fill="var(--color-success)"
               radius={[4, 4, 0, 0]}
               maxBarSize={40}
             />

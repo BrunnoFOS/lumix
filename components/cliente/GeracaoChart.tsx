@@ -75,30 +75,30 @@ export function GeracaoChart({ dados }: { dados: DadoGeracao[] }) {
       <CardContent>
         <ResponsiveContainer width="100%" height={320}>
           <BarChart data={chartData} barGap={4}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis
               dataKey="mes"
               tick={{ fontSize: 12 }}
               tickLine={false}
-              axisLine={{ stroke: "#E5E7EB" }}
+              axisLine={{ stroke: "var(--border)" }}
             />
             <YAxis
               tick={{ fontSize: 12 }}
               tickLine={false}
-              axisLine={{ stroke: "#E5E7EB" }}
+              axisLine={{ stroke: "var(--border)" }}
               tickFormatter={(v) => `${v}`}
             />
             <Tooltip content={<CustomTooltip />} />
             <Legend />
             <Bar
               dataKey="Geração Real"
-              fill="#F97316"
+              fill="var(--primary)"
               radius={[4, 4, 0, 0]}
               maxBarSize={40}
             />
             <Bar
               dataKey="Estimado"
-              fill="#FBBF24"
+              fill="var(--color-solar-gold)"
               radius={[4, 4, 0, 0]}
               maxBarSize={40}
               opacity={0.6}

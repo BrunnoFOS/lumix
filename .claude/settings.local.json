@@ -77,7 +77,9 @@
       "Bash(relatorios \")",
       "Bash(del \"C:\\\\Users\\\\brunn\\\\lumix-projeto\\\\supabase\\\\migrations\\\\20260703_add_ciclo_to_relatorios.sql\")",
       "mcp__claude_ai_n8n_infraway__List_Workflows",
-      "mcp__supabase-lumix__get_advisors"
+      "mcp__supabase-lumix__get_advisors",
+      "Bash(python:*)",
+      "Bash(where node)"
     ]
   }
 }

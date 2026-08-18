@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Save, Sun, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { updateParametrosEstimativa } from "@/lib/actions/unidades";
-import type { UCSectionHandle } from "@/types/uc-section";
 
 interface Props {
   ucId: string;
@@ -18,10 +17,9 @@ interface Props {
     degradacao_anos_seguintes: number | null;
     data_inicio_degradacao: string | null;
   };
-  onChangeStatus?: () => void;
 }
 
-export const UCParametrosEstimativa = forwardRef<UCSectionHandle, Props>(function UCParametrosEstimativa({ ucId, initial, onChangeStatus }, ref) {
+export function UCParametrosEstimativa({ ucId, initial }: Props) {
   const router = useRouter();
 
   const [dataInicioDegradacao, setDataInicioDegradacao] = useState(
@@ -49,15 +47,6 @@ export const UCParametrosEstimativa = forwardRef<UCSectionHandle, Props>(functio
       (initial.degradacao_anos_seguintes?.toString() ?? "");
 
   const isIncomplete = !fatorRendimento || !degradacaoAnoZero || !degradacaoAnosSeguintes;
-
-  useImperativeHandle(ref, () => ({
-    save: handleSave,
-    hasChanges,
-  }), [hasChanges]);
-
-  useEffect(() => {
-    onChangeStatus?.();
-  }, [hasChanges, onChangeStatus]);
 
   async function handleSave() {
     setSaving(true);
@@ -209,4 +198,4 @@ export const UCParametrosEstimativa = forwardRef<UCSectionHandle, Props>(functio
       </CardContent>
     </Card>
   );
-});
+}
