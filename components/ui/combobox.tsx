@@ -4,6 +4,14 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// Remove acentos e normaliza para lowercase
+function normalizeString(str: string): string {
+  return str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 interface ComboboxOption {
   value: string;
   label: string;
@@ -68,9 +76,9 @@ export function Combobox({
 
   const filtered = useMemo(() => {
     if (!open || !search) return normalizedOptions;
-    const termo = search.toLowerCase();
+    const termo = normalizeString(search);
     return normalizedOptions.filter((o) =>
-      o.label.toLowerCase().includes(termo)
+      normalizeString(o.label).includes(termo)
     );
   }, [normalizedOptions, open, search]);
 

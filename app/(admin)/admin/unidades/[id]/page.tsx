@@ -97,7 +97,7 @@ export default async function UCDetalhesPage({ params }: Props) {
         </CardHeader>
         <CardContent className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-3">
-            <DetailRow label="Potência instalada" value={uc.potencia_instalada_kwp ? `${uc.potencia_instalada_kwp} kWp` : null} />
+            <DetailRow label="Potência instalada" value={uc.potencia_instalada_kw ? `${uc.potencia_instalada_kw} kW` : null} />
             <DetailRow label="Qtd. inversores" value={uc.quantidade_inversores} />
             <DetailRow label="Modelo inversores" value={uc.modelo_inversores} />
           </div>

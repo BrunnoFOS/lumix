@@ -79,7 +79,11 @@
       "mcp__claude_ai_n8n_infraway__List_Workflows",
       "mcp__supabase-lumix__get_advisors",
       "Bash(python:*)",
-      "Bash(where node)"
+      "Bash(where node)",
+      "Bash(del \"C:\\\\Users\\\\brunn\\\\lumix-projeto\\\\components\\\\admin\\\\GerarRelatorioForm.tsx\")",
+      "Bash(git grep:*)",
+      "Bash(NEXT_PUBLIC_SUPABASE_URL=\"https://ukobyfxffhtlywzmtaiq.supabase.co\" SUPABASE_SERVICE_ROLE_KEY=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVrb2J5ZnhmZmh0bHl3em10YWlxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzkxODcxNiwiZXhwIjoyMDg5NDk0NzE2fQ.x6eA6IPkRBTJqRuKg1ydH05MOXZzN5kjAB-qCB2gn-c\" node:*)",
+      "Bash(NEXT_PUBLIC_SUPABASE_URL=\"https://ukobyfxffhtlywzmtaiq.supabase.co\" SUPABASE_SERVICE_ROLE_KEY=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVrb2J5ZnhmZmh0bHl3em10YWlxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzkxODcxNiwiZXhwIjoyMDg5NDk0NzE2fQ.x6eA6IPkRBTJqRuKg1ydH05MOXZzN5kjAB-qCB2gn-c\" node -e \"\nimport\\(''@supabase/supabase-js''\\).then\\(async \\({createClient}\\) => {\n  const supabase = createClient\\(''https://ukobyfxffhtlywzmtaiq.supabase.co'', ''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVrb2J5ZnhmZmh0bHl3em10YWlxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzkxODcxNiwiZXhwIjoyMDg5NDk0NzE2fQ.x6eA6IPkRBTJqRuKg1ydH05MOXZzN5kjAB-qCB2gn-c''\\);\n  \n  // Deletar relatório real\n  console.log\\(''🗑️  Deletando relatório real...''\\);\n  await supabase.from\\(''relatorios''\\).delete\\(\\).eq\\(''id'', ''afb13872-c005-4762-9895-f429e60995db''\\);\n  console.log\\(''✅ Relatório real deletado!''\\);\n  \n  // Deletar fatura\n  console.log\\(''🗑️  Deletando fatura...''\\);\n  const {error} = await supabase.from\\(''faturas''\\).delete\\(\\).eq\\(''id'', ''2b92f858-4d79-4d36-ae0e-817a8519321e''\\);\n  if \\(error\\) console.error\\(''Erro:'', error\\);\n  else console.log\\(''✅ Fatura deletada!''\\);\n  \n  console.log\\(''✨ Concluído!''\\);\n}\\);\n\")"
     ]
   }
 }

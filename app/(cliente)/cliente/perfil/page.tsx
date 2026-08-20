@@ -123,7 +123,7 @@ export default async function PerfilPage() {
                       </p>
                       <p className="text-xs text-muted-foreground">{uc.titular}</p>
                     </div>
-                    <Badge variant="outline">{uc.potencia_instalada_kwp} kWp</Badge>
+                    <Badge variant="outline">{uc.potencia_instalada_kw} kW</Badge>
                   </div>
                 ))}
               </div>

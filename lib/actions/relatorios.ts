@@ -63,6 +63,7 @@ export async function createRelatorio(formData: FormData): Promise<ActionResult>
       fatura_id,
       status_envio: "pendente",
       gerado_por: "manual",
+      tipo_relatorio: fatura_id ? "real" : "estimado",
     })
     .select("id")
     .single();
@@ -248,7 +249,7 @@ export async function getRelatoriosCliente(empresaIds: string | string[], filtro
 
   let query = supabase
     .from("relatorios")
-    .select("id, mes_referencia, titulo, geracao_kwh, geracao_estimada_kwh, economia_reais, indice_performance, status_envio, tipo_relatorio, pdf_url, created_at, uc:unidades_consumidoras(id, codigo_uc)")
+    .select("id, mes_referencia, titulo, geracao_kwh, geracao_estimada_kwh, economia_reais, indice_performance, status_envio, tipo_relatorio, pdf_url, created_at, uc:unidades_consumidoras(id, codigo_uc), empresa:empresas(id, nome)")
     .in("empresa_id", ids)
     .eq("status_envio", "enviado")
     .order("mes_referencia", { ascending: false });
@@ -269,118 +270,68 @@ export async function getRelatoriosCliente(empresaIds: string | string[], filtro
 
   return data.map((row) => {
     const ucRaw = row.uc as unknown;
+    const empresaRaw = row.empresa as unknown;
     return {
       ...row,
       uc: (Array.isArray(ucRaw) ? ucRaw[0] ?? null : ucRaw) as { id: string; codigo_uc: string } | null,
+      empresa: (Array.isArray(empresaRaw) ? empresaRaw[0] ?? null : empresaRaw) as { id: string; nome: string } | null,
     };
   });
 }
 
-export async function criarRelatorioComAnexo(formData: FormData): Promise<ActionResult> {
-  const supabase = await createServerClient();
-
-  const uc_id = formData.get("uc_id") as string;
-  const empresa_id = formData.get("empresa_id") as string;
-  const mes_referencia = formData.get("mes_referencia") as string;
-  const pdf_url = (formData.get("pdf_url") as string) || null;
-  const comentarioAdmin = (formData.get("comentario_admin") as string) || null;
-
-  if (!uc_id || !empresa_id || !mes_referencia) {
-    return { error: "UC, empresa e mês de referência são obrigatórios." };
-  }
-
-  if (!pdf_url) {
-    return { error: "Anexo da fatura é obrigatório." };
-  }
-
-  // Buscar dados da UC (código + station_id para o N8N)
-  const { data: uc } = await supabase
-    .from("unidades_consumidoras")
-    .select("codigo_uc, station_id")
-    .eq("id", uc_id)
-    .single();
-
-  if (!uc) {
-    return { error: "UC não encontrada." };
-  }
-
-  // Tentar calcular geração estimada automaticamente
-  let geracao_estimada_kwh: number | null = null;
-  const estimativa = await calcularGeracaoEstimadaUC(uc_id, mes_referencia);
-  if ("data" in estimativa) {
-    geracao_estimada_kwh = estimativa.data.geracao_estimada_kwh;
-  }
-
-  // Criar/atualizar fatura (a fatura é o documento enviado pelo admin)
-  // O N8N vai processar essa fatura e criar o relatório com o PDF gerado
-  const { data: fatura, error } = await supabase
-    .from("faturas")
-    .upsert(
-      {
-        uc_id,
-        mes_referencia,
-        pdf_url,
-        status: "pendente",
-        inserido_por: (await supabase.auth.getUser()).data.user?.id ?? null,
-      },
-      { onConflict: "uc_id,mes_referencia" }
-    )
-    .select("id")
-    .single();
-
-  if (error) {
-    return { error: "Erro ao salvar fatura." };
-  }
-
-  // Enviar ao N8N — ele processa a fatura e cria o relatório
+export async function enviarWebhookRelatorio(params: {
+  fatura_id: string;
+  uc_id: string;
+  empresa_id: string;
+  mes_referencia: string;
+  arquivo_url: string | null;
+  codigo_uc: string;
+  station_id: string | null;
+  geracao_estimada_kwh: number | null;
+  comentario_admin?: string | null;
+  tipo_relatorio?: string;
+}): Promise<void> {
   const n8nUser = process.env.N8N_API_USER;
   const n8nPassword = process.env.N8N_API_PASSWORD;
 
-  if (n8nUser && n8nPassword) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+  if (!n8nUser || !n8nPassword) return;
 
-    try {
-      const credentials = Buffer.from(`${n8nUser}:${n8nPassword}`).toString("base64");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
 
-      const n8nWebhookRelatorio = process.env.N8N_WEBHOOK_GERAR_RELATORIO ??
-        "https://n8n-n8n.nt4zcb.easypanel.host/webhook/7d6333a5-5c73-4be8-a3e3-937238d4f3a8";
+  try {
+    const credentials = Buffer.from(`${n8nUser}:${n8nPassword}`).toString("base64");
 
-      await fetch(
-        n8nWebhookRelatorio,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Basic ${credentials}`,
-          },
-          body: JSON.stringify({
-            relatorio_id: fatura.id,
-            fatura_id: fatura.id,
-            uc_id,
-            empresa_id,
-            mes_referencia,
-            arquivo_url: pdf_url,
-            codigo_uc: uc.codigo_uc,
-            station_id: uc.station_id,
-            geracao_estimada_kwh,
-            comentario_admin: comentarioAdmin || null,
-            tipo_relatorio: "real",
-          }),
-          signal: controller.signal,
-        }
-      );
+    const n8nWebhookRelatorio = process.env.N8N_WEBHOOK_GERAR_RELATORIO ??
+      "https://n8n-n8n.nt4zcb.easypanel.host/webhook/7d6333a5-5c73-4be8-a3e3-937238d4f3a8";
 
-      clearTimeout(timeout);
-    } catch {
-      clearTimeout(timeout);
-      // Fatura salva no banco — N8N processará quando disponível
-    }
+    await fetch(n8nWebhookRelatorio, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Basic ${credentials}`,
+      },
+      body: JSON.stringify({
+        relatorio_id: params.fatura_id,
+        fatura_id: params.fatura_id,
+        uc_id: params.uc_id,
+        empresa_id: params.empresa_id,
+        mes_referencia: params.mes_referencia,
+        arquivo_url: params.arquivo_url,
+        codigo_uc: params.codigo_uc,
+        station_id: params.station_id,
+        geracao_estimada_kwh: params.geracao_estimada_kwh,
+        comentario_admin: params.comentario_admin || null,
+        tipo_relatorio: params.tipo_relatorio ?? "real",
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+  } catch {
+    clearTimeout(timeout);
+    // Fatura salva no banco — N8N processará quando disponível
   }
-
-  revalidatePath("/admin/relatorios");
-  revalidatePath("/admin/faturas");
-  return { data: { id: fatura.id, uc_id, mes_referencia } };
 }
 
 export async function checkRelatorioGerado(ucId: string, mesReferencia: string): Promise<boolean> {

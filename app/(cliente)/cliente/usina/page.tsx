@@ -23,7 +23,12 @@ export default async function UsinaPage() {
     .eq("ativa", true)
     .order("codigo_uc");
 
-  const ucsList = ucs ?? [];
+  // Mapear campos do banco para interface do componente
+  const ucsList = (ucs ?? []).map((uc) => ({
+    ...uc,
+    potencia_instalada_kw: uc.potencia_instalada_kwp,
+    potencia_inversor_kw: uc.potencia_inversor_kw,
+  }));
   const ucIds = ucsList.map((uc) => uc.id);
 
   // Parallelize uc_stations + inversores (both depend only on ucIds)
@@ -49,7 +54,7 @@ export default async function UsinaPage() {
     provider: string;
     station_name: string;
     cidade_uf: string | null;
-    potencia_kwp: number;
+    potencia_kw: number;
     qtd_inversores: number;
     modelo_inversores: string[] | null;
     potencia_inversor_kw: number | null;
@@ -65,7 +70,7 @@ export default async function UsinaPage() {
       provider: st.provider,
       station_name: cached?.station_name ?? "",
       cidade_uf: cached?.cidade_uf ?? null,
-      potencia_kwp: cached?.potencia_instalada_kwp ?? 0,
+      potencia_kw: cached?.potencia_instalada_kwp ?? 0,
       qtd_inversores: cached?.qtd_inversores ?? 0,
       modelo_inversores: cached?.modelo_inversores ?? null,
       potencia_inversor_kw: cached?.potencia_inversor_kw ?? null,
@@ -83,7 +88,7 @@ export default async function UsinaPage() {
   }
 
   // Totais para o resumo
-  const totalPotencia = ucsList.reduce((sum, uc) => sum + (uc.potencia_instalada_kwp ?? 0), 0);
+  const totalPotencia = ucsList.reduce((sum, uc) => sum + (uc.potencia_instalada_kw ?? 0), 0);
   const totalModulos = ucsList.reduce((sum, uc) => sum + (uc.quantidade_modulos ?? 0), 0);
   const totalInversores = ucsList.reduce((sum, uc) => sum + (uc.quantidade_inversores ?? 0), 0);
 

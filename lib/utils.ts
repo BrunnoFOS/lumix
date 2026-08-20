@@ -74,3 +74,28 @@ export function validateCNPJ(cnpj: string): boolean {
 export function cleanCNPJ(cnpj: string): string {
   return cnpj.replace(/\D/g, "");
 }
+
+/**
+ * Gera o nome do arquivo para download de relatório
+ * Formato: "Relatório de Geração Fotovoltaica - Real - 07/2026 - Cliente"
+ */
+export function gerarNomeRelatorio(
+  mesReferencia: string,
+  tipoRelatorio: string,
+  nomeEmpresa: string
+): string {
+  // Extrair mês/ano de "2026-07-01"
+  const [ano, mes] = mesReferencia.split("-");
+  const mesAno = `${mes}/${ano}`;
+
+  // Tipo (Real ou Estimado)
+  const tipo = tipoRelatorio === "real" ? "Real" : "Estimado";
+
+  // Abreviar nome da empresa se muito longo (máximo 50 caracteres)
+  let cliente = nomeEmpresa;
+  if (cliente.length > 50) {
+    cliente = cliente.substring(0, 47) + "...";
+  }
+
+  return `Relatório de Geração Fotovoltaica - ${tipo} - ${mesAno} - ${cliente}.pdf`;
+}

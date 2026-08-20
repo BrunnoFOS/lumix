@@ -96,6 +96,7 @@ export interface SolisGeracaoMensal {
     grid_sell_kwh: number;
     grid_purchased_kwh: number;
     home_load_kwh: number;
+    geracao_estimada_kwh?: number;
   };
   metricas: {
     media_diaria_kwh: number;
@@ -198,7 +199,7 @@ export interface UsinaInversor {
   sn: string;
   model: string;
   product_model: string;
-  power_kw: number;
+  power_kwp: number;
   state: number; // 1=Online, 2=Offline, 3=Alarme
 }
 
@@ -210,7 +211,7 @@ export interface UsinaUC {
   potencia_instalada_display?: string;
   qtd_inversores: number;
   modelo_inversores: string[];
-  potencia_inversor_kw: number;
+  potencia_inversor_kwp: number;
   potencia_inversor_display?: string;
   data_instalacao: string | null;
   data_instalacao_iso: string | null;
@@ -244,10 +245,10 @@ function cacheRowToUsinaUC(row: UsinaCacheRow): UsinaUC {
     station_name: row.station_name,
     cidade_uf: row.cidade_uf,
     potencia_instalada_kwp: row.potencia_instalada_kwp,
-    potencia_instalada_display: `${row.potencia_instalada_kwp} kWp`,
+    potencia_instalada_display: `${row.potencia_instalada_kwp} kW`,
     qtd_inversores: row.qtd_inversores,
     modelo_inversores: row.modelo_inversores ?? [],
-    potencia_inversor_kw: row.potencia_inversor_kw,
+    potencia_inversor_kwp: row.potencia_inversor_kw,
     potencia_inversor_display: `${row.potencia_inversor_kw} kW`,
     data_instalacao: row.data_instalacao,
     data_instalacao_iso: row.data_instalacao,

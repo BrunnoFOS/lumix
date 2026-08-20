@@ -19,10 +19,10 @@ function afterResponse(callback: () => Promise<void>) {
 
 interface ActionResult {
   error?: string;
-  data?: { id: string };
+  data?: { id: string; uc_id?: string; mes_referencia?: string };
 }
 
-async function enviarWebhookFatura(payload: {
+export async function enviarWebhookFatura(payload: {
   fatura_id: string;
   uc_id: string;
   mes_referencia: string;
@@ -474,7 +474,21 @@ export async function createFaturaComGeracao(formData: FormData): Promise<Action
     .eq("id", user?.id ?? "")
     .single();
 
-  // Enviar webhook após a resposta ser enviada ao cliente (não bloqueia o retorno)
+  // Calcular geração estimada e adicionar aos dados de geração
+  if (dadosGeracao?.totais?.geracao_kwh) {
+    const { calcularGeracaoEstimadaUC } = await import("@/lib/actions/geracao-estimada");
+    const resultado = await calcularGeracaoEstimadaUC(
+      uc_id,
+      mes_referencia,
+      dadosGeracao.totais.geracao_kwh
+    );
+
+    if ("data" in resultado && resultado.data) {
+      // Adicionar geracao_estimada_kwh dentro de totais
+      dadosGeracao.totais.geracao_estimada_kwh = resultado.data.geracao_estimada_kwh;
+    }
+  }
+
   const webhookPayload = {
     fatura_id: data.id,
     uc_id,
@@ -486,12 +500,13 @@ export async function createFaturaComGeracao(formData: FormData): Promise<Action
     dados_geracao: dadosGeracao,
   };
 
+  // Enviar webhook de fatura após a resposta (o n8n faz extração + geração do relatório)
   afterResponse(async () => {
     const controller = new AbortController();
     const webhookTimeout = setTimeout(() => controller.abort(), 15000);
 
     try {
-      const res = await fetch(WEBHOOK_FATURA_URL, {
+      await fetch(WEBHOOK_FATURA_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(webhookPayload),
@@ -504,5 +519,6 @@ export async function createFaturaComGeracao(formData: FormData): Promise<Action
   });
 
   revalidatePath("/admin/faturas");
-  return { data: { id: data.id } };
+  revalidatePath("/admin/relatorios");
+  return { data: { id: data.id, uc_id, mes_referencia } };
 }

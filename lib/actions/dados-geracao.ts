@@ -211,7 +211,7 @@ export interface InversorDetalhe {
   sn: string;
   model: string;
   product_model: string;
-  power_kw: number;
+  power_kwp: number;
   state: number; // 1=Online, 2=Offline, 3=Alarme
 }
 

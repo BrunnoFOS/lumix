@@ -112,7 +112,7 @@ export function calcularDegradacaoAcumulada(params: {
  * Calcula a geração estimada mensal (kWh).
  *
  * Fórmula:
- * Geração Estimada = Potência (kWp) × GHI (kWh/m²/dia) × Dias × Fator Rendimento × (1 - Degradação)
+ * Geração Estimada = Potência (kW) × GHI (kWh/m²/dia) × Dias × Fator Rendimento × (1 - Degradação)
  *
  * O GHI vem do banco em Wh/m²/dia, então divide por 1000.
  */
@@ -191,7 +191,7 @@ export function validarUCParaEstimativa(
 ): { valid: true } | { valid: false; camposFaltantes: string[] } {
   const faltantes: string[] = [];
 
-  if (!uc.potencia_instalada_kwp) faltantes.push("Potência instalada (kWp)");
+  if (!uc.potencia_instalada_kwp) faltantes.push("Potência instalada (kW)");
   if (!uc.cidade) faltantes.push("Cidade");
   if (!uc.estado) faltantes.push("Estado");
   if (uc.fator_rendimento == null) faltantes.push("Fator de rendimento");

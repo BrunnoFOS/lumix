@@ -113,7 +113,7 @@ export function VincularSolisUC({
     const result = await vincularSolisUC(empresaId, {
       station_id: uc.station_id,
       station_name: uc.station_name,
-      potencia_instalada_kwp: uc.potencia_instalada_kwp,
+      potencia_instalada_kw: uc.potencia_instalada_kw,
       qtd_inversores: uc.qtd_inversores,
       modelo_inversores: uc.modelo_inversores,
       potencia_inversor_kw: uc.potencia_inversor_kw,
@@ -144,7 +144,7 @@ export function VincularSolisUC({
       similarStation.station_id,
       similarStation.provider,
       {
-        potencia_kwp: similarStation.potencia_instalada_kwp,
+        potencia_kw: similarStation.potencia_instalada_kw,
         qtd_inversores: similarStation.qtd_inversores,
       }
     );
@@ -186,7 +186,7 @@ export function VincularSolisUC({
       selectedStation.station_id,
       selectedStation.provider,
       {
-        potencia_kwp: selectedStation.potencia_instalada_kwp,
+        potencia_kw: selectedStation.potencia_instalada_kw,
         qtd_inversores: selectedStation.qtd_inversores,
       }
     );
@@ -276,7 +276,7 @@ export function VincularSolisUC({
                         {parseCity(uc.cidade_uf)}
                       </div>
                     </TableCell>
-                    <TableCell>{uc.potencia_instalada_kwp} kWp</TableCell>
+                    <TableCell>{uc.potencia_instalada_kw} kW</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1.5">
                         <Cpu className="h-3.5 w-3.5 text-muted-foreground" />

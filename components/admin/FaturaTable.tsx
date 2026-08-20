@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatCurrency, formatMesReferencia, formatKWh } from "@/lib/utils";
+import { formatCurrency, formatMesReferencia, formatKWh, gerarNomeRelatorio } from "@/lib/utils";
 
 interface FaturaRow {
   id: string;
@@ -41,6 +41,7 @@ interface RelatorioInfo {
   pdf_url: string | null;
   status_envio: string;
   tipo_relatorio: string;
+  mes_referencia: string;
 }
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -151,16 +152,37 @@ export function FaturaTable({
                           {rel.status_envio === "enviado" ? "Enviado" : rel.status_envio === "pendente" ? "Pendente" : "Erro"}
                         </Badge>
                         {rel.pdf_url && (
-                          <a
-                            href={rel.pdf_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const nomeArquivo = gerarNomeRelatorio(
+                                rel.mes_referencia,
+                                rel.tipo_relatorio,
+                                fatura.uc?.empresa?.nome || "Cliente"
+                              );
+                              try {
+                                const response = await fetch(rel.pdf_url!);
+                                const blob = await response.blob();
+                                const url = window.URL.createObjectURL(blob);
+                                const link = document.createElement("a");
+                                link.href = url;
+                                link.download = nomeArquivo;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                window.URL.revokeObjectURL(url);
+                              } catch (error) {
+                                console.error("Erro ao baixar PDF:", error);
+                                // Fallback: abrir em nova aba
+                                window.open(rel.pdf_url!, "_blank");
+                              }
+                            }}
                             className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                            title="Ver relatório"
+                            title="Baixar relatório"
                           >
-                            <ExternalLink className="h-3 w-3" />
-                            Ver
-                          </a>
+                            <Download className="h-3 w-3" />
+                            Baixar
+                          </button>
                         )}
                       </div>
                     ) : (

@@ -6,8 +6,6 @@ import { RelatorioPageClient } from "@/components/admin/RelatorioPageClient";
 import { SolisGeracaoMensal } from "@/components/admin/SolisGeracaoMensal";
 import { UsinasOfflineBanner } from "@/components/admin/UsinasOfflineBanner";
 import { createServerClient } from "@/lib/supabase/server";
-import { fetchSolisUCs } from "@/lib/actions/solis";
-import type { UCOption } from "@/lib/actions/solis";
 import { getUCsComStations } from "@/lib/actions/unidades";
 import { getEmpresas } from "@/lib/actions/empresas";
 
@@ -15,24 +13,6 @@ export const dynamic = "force-dynamic";
 
 interface Props {
   searchParams: Promise<{ search?: string; status?: string }>;
-}
-
-async function fetchDbUcs() {
-  const supabase = await createServerClient();
-  const { data: rawUcs } = await supabase
-    .from("unidades_consumidoras")
-    .select("id, codigo_uc, empresa:empresas(id, nome)")
-    .eq("ativa", true)
-    .order("codigo_uc");
-
-  return (rawUcs ?? []).map((uc) => {
-    const empresaRaw = uc.empresa as unknown;
-    return {
-      id: uc.id,
-      codigo_uc: uc.codigo_uc,
-      empresa: (Array.isArray(empresaRaw) ? empresaRaw[0] ?? null : empresaRaw) as { id: string; nome: string } | null,
-    };
-  });
 }
 
 async function GeracaoMensalSection() {
@@ -50,10 +30,8 @@ async function GeracaoMensalSection() {
 async function RelatorioListSection({ search, status }: { search?: string; status?: string }) {
   const supabase = await createServerClient();
 
-  const [relatorios, dbUcs, solisResult, { data: fpsData }] = await Promise.all([
+  const [relatorios, { data: fpsData }] = await Promise.all([
     getRelatorios(search, status),
-    fetchDbUcs(),
-    fetchSolisUCs(),
     supabase
       .from("faturas_processadas")
       .select("id, uc_id, mes_referencia, pdf_fatura_url")
@@ -69,26 +47,7 @@ async function RelatorioListSection({ search, status }: { search?: string; statu
     };
   }
 
-  // Montar UCOptions
-  const dbOptions: UCOption[] = dbUcs.map((uc) => ({
-    ...uc,
-    source: "database" as const,
-  }));
-
-  const dbCodesSet = new Set(dbUcs.map((db) => db.codigo_uc));
-  const solisOptions: UCOption[] = solisResult.data
-    .filter((s) => !dbCodesSet.has(s.station_id))
-    .map((s) => ({
-      id: `solis:${s.station_id}`,
-      codigo_uc: s.station_name,
-      empresa: null,
-      source: "solis" as const,
-      station_name: s.station_name,
-    }));
-
-  const ucs = [...dbOptions, ...solisOptions];
-
-  return <RelatorioPageClient relatorios={relatorios} ucs={ucs} faturasProcessadasMap={faturasProcessadasMap} />;
+  return <RelatorioPageClient relatorios={relatorios} faturasProcessadasMap={faturasProcessadasMap} />;
 }
 
 function GeracaoMensalFallback() {

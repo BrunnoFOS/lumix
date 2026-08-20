@@ -43,7 +43,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatCurrency, formatKWh, formatMesReferencia, formatDateTime } from "@/lib/utils";
+import { formatCurrency, formatKWh, formatMesReferencia, formatDateTime, gerarNomeRelatorio } from "@/lib/utils";
 import {
   updateRelatorioStatus,
   arquivarRelatorio,
@@ -341,12 +341,31 @@ export function RelatorioTable({
                       <DropdownMenuContent align="end">
                         {rel.pdf_url && (
                           <DropdownMenuItem
-                            onClick={() =>
-                              window.open(rel.pdf_url!, "_blank")
-                            }
+                            onClick={async () => {
+                              const nomeArquivo = gerarNomeRelatorio(
+                                rel.mes_referencia,
+                                rel.tipo_relatorio,
+                                rel.empresa?.nome || "Cliente"
+                              );
+                              try {
+                                const response = await fetch(rel.pdf_url!);
+                                const blob = await response.blob();
+                                const url = window.URL.createObjectURL(blob);
+                                const link = document.createElement("a");
+                                link.href = url;
+                                link.download = nomeArquivo;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                window.URL.revokeObjectURL(url);
+                              } catch (error) {
+                                console.error("Erro ao baixar PDF:", error);
+                                window.open(rel.pdf_url!, "_blank");
+                              }
+                            }}
                           >
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            Ver anexo
+                            <Download className="mr-2 h-4 w-4" />
+                            Baixar anexo
                           </DropdownMenuItem>
                         )}
                         {(() => {

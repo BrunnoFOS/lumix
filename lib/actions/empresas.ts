@@ -128,6 +128,27 @@ export async function arquivarEmpresa(
 export async function getEmpresas(search?: string, status?: string) {
   const supabase = await createServerClient();
 
+  // Se há busca, usar função RPC com unaccent
+  if (search) {
+    const { data, error } = await supabase.rpc("search_empresas_unaccent", {
+      search_term: search,
+    });
+
+    if (error) return [];
+    if (!data) return [];
+
+    // Aplicar filtros de status no resultado
+    let filtered = data;
+    if (status === "ativas") {
+      filtered = data.filter((e) => e.ativa && !e.arquivada);
+    } else if (status === "arquivadas") {
+      filtered = data.filter((e) => e.arquivada);
+    }
+
+    return filtered;
+  }
+
+  // Sem busca: query normal
   let query = supabase
     .from("empresas")
     .select("id, nome, cnpj, cidade, estado, ativa, arquivada")
@@ -137,11 +158,6 @@ export async function getEmpresas(search?: string, status?: string) {
     query = query.eq("ativa", true).eq("arquivada", false);
   } else if (status === "arquivadas") {
     query = query.eq("arquivada", true);
-  }
-  // else: sem filtro — retorna todas (ativas + arquivadas)
-
-  if (search) {
-    query = query.or(`nome.ilike.%${search}%,cnpj.ilike.%${search}%`);
   }
 
   const { data, error } = await query;

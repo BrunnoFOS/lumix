@@ -28,7 +28,7 @@ interface UC {
   codigo_uc: string;
   titular: string;
   distribuidora: string;
-  potencia_instalada_kwp: number;
+  potencia_instalada_kw: number;
   cidade: string | null;
   estado: string | null;
   ativa: boolean;
@@ -78,7 +78,7 @@ export function UCTable({ unidades }: { unidades: UC[] }) {
               <TableHead>Código UC</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Distribuidora</TableHead>
-              <TableHead>Potência (kWp)</TableHead>
+              <TableHead>Potência (kW)</TableHead>
               <TableHead>Cidade/UF</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-12" />
@@ -106,7 +106,7 @@ export function UCTable({ unidades }: { unidades: UC[] }) {
                     : uc.empresa?.nome ?? "—"}
                 </TableCell>
                 <TableCell>{uc.distribuidora}</TableCell>
-                <TableCell>{uc.potencia_instalada_kwp}</TableCell>
+                <TableCell>{uc.potencia_instalada_kw}</TableCell>
                 <TableCell>
                   {uc.cidade || uc.estado
                     ? [uc.cidade, uc.estado].filter(Boolean).join("/")

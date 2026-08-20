@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Radio,
   AlertCircle,
@@ -12,6 +13,8 @@ import {
   ChevronRight,
   LinkIcon,
   ExternalLink,
+  Link2,
+  Loader2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +26,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Combobox } from "@/components/ui/combobox";
+import { vincularSolisUC } from "@/lib/actions/unidades";
 import type { UsinaUC } from "@/lib/actions/solis";
 
 const PAGE_SIZE = 10;
@@ -55,12 +69,22 @@ export function SolisUCTable({
   ucs,
   error,
   vinculadas = {},
+  empresas = [],
 }: {
   ucs: UsinaUC[];
   error?: string;
   vinculadas?: Record<string, VinculadaInfo>;
+  empresas?: Array<{ id: string; nome: string }>;
 }) {
+  const router = useRouter();
   const [page, setPage] = useState(0);
+
+  // Estado para modal de vinculação
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedUsina, setSelectedUsina] = useState<UsinaUC | null>(null);
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState("");
+  const [vinculando, setVinculando] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (error) {
     return (
@@ -90,6 +114,40 @@ export function SolisUCTable({
     acl: "ACL",
   };
 
+  async function handleVincular() {
+    if (!selectedUsina || !selectedEmpresaId) return;
+
+    setVinculando(true);
+    setErrorMsg(null);
+
+    const result = await vincularSolisUC(selectedEmpresaId, {
+      station_id: selectedUsina.station_id,
+      station_name: selectedUsina.station_name,
+      potencia_instalada_kwp: selectedUsina.potencia_instalada_kwp,
+      qtd_inversores: selectedUsina.qtd_inversores,
+      modelo_inversores: selectedUsina.modelo_inversores,
+      potencia_inversor_kwp: selectedUsina.potencia_inversor_kwp,
+      data_instalacao_iso: selectedUsina.data_instalacao_iso,
+      cidade_uf: selectedUsina.cidade_uf,
+    });
+
+    setVinculando(false);
+
+    if (result.error) {
+      setErrorMsg(result.error);
+    } else if (result.data?.id) {
+      // Redirecionar para a página de detalhes da UC criada
+      router.push(`/admin/unidades/${result.data.id}`);
+    }
+  }
+
+  function openVincularDialog(usina: UsinaUC) {
+    setSelectedUsina(usina);
+    setSelectedEmpresaId("");
+    setErrorMsg(null);
+    setDialogOpen(true);
+  }
+
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-border">
@@ -98,7 +156,7 @@ export function SolisUCTable({
             <TableRow>
               <TableHead>Usina</TableHead>
               <TableHead>Localização</TableHead>
-              <TableHead>Potência (kWp)</TableHead>
+              <TableHead>Potência (kW)</TableHead>
               <TableHead>Inversores</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Tarifa</TableHead>
@@ -139,7 +197,7 @@ export function SolisUCTable({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className="font-medium">{uc.potencia_instalada_kwp}</span>
+                    <span className="font-medium">{uc.potencia_instalada_kw}</span>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5">
@@ -161,7 +219,7 @@ export function SolisUCTable({
                     )}
                   </TableCell>
                   <TableCell>
-                    {vinc && (
+                    {vinc ? (
                       <Link
                         href={`/admin/unidades/${vinc.ucId}`}
                         className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
@@ -169,6 +227,15 @@ export function SolisUCTable({
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                       </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => openVincularDialog(uc)}
+                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
+                        title="Detalhes da UC"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </button>
                     )}
                   </TableCell>
                 </TableRow>
@@ -194,6 +261,40 @@ export function SolisUCTable({
           </div>
         </div>
       )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Criar UC para usina</DialogTitle>
+            <DialogDescription>
+              Selecione a empresa para criar a UC da usina <strong>{selectedUsina?.station_name}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="empresa">Empresa</Label>
+              <Combobox
+                options={empresas.map((e) => ({ value: e.id, label: e.nome }))}
+                value={selectedEmpresaId}
+                onChange={setSelectedEmpresaId}
+                placeholder="Selecione uma empresa..."
+              />
+            </div>
+            {errorMsg && (
+              <p className="text-sm text-red-600">{errorMsg}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={vinculando}>
+              Cancelar
+            </Button>
+            <Button onClick={handleVincular} disabled={!selectedEmpresaId || vinculando}>
+              {vinculando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {vinculando ? "Criando..." : "Criar UC"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

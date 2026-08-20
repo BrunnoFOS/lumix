@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Zap, Activity, TrendingUp, Target } from "lucide-react";
+import { Loader2, Zap, Activity, TrendingUp, Target, CheckCircle2, AlertTriangle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,7 @@ import { FileUpload } from "@/components/shared/FileUpload";
 import { createFaturaComGeracao } from "@/lib/actions/faturas";
 import { fetchGeracaoMensal } from "@/lib/actions/solis";
 import { createClient } from "@/lib/supabase/client";
+import { useFaturaProcessamento } from "@/hooks/use-fatura-processamento";
 import type { SolisGeracaoMensal } from "@/lib/actions/solis";
 
 interface UC {
@@ -25,7 +26,7 @@ interface UC {
 
 interface FormState {
   error?: string;
-  data?: { id: string };
+  data?: { id: string; uc_id?: string; mes_referencia?: string };
 }
 
 interface Cliente {
@@ -51,6 +52,7 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
   const [loadingGeracao, setLoadingGeracao] = useState(false);
   const [geracaoError, setGeracaoError] = useState<string | null>(null);
 
+  const { status: processingStatus, start: startPolling, dismiss } = useFaturaProcessamento();
   const selectedUC = ucs.find((u) => u.id === ucId);
 
   // Preencher datas padrão quando mês muda
@@ -149,21 +151,39 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
     null
   );
 
-  const hasRedirected = useRef(false);
+  const hasHandledSuccess = useRef(false);
   useEffect(() => {
-    if (state?.data?.id && !hasRedirected.current) {
-      hasRedirected.current = true;
-      toast.success("Fatura enviada para processamento com sucesso!", {
-        description: "Redirecionando para a lista de faturas...",
-      });
-      setTimeout(() => {
-        router.push("/admin/faturas");
-      }, 1500);
+    if (state?.data?.id && !hasHandledSuccess.current) {
+      hasHandledSuccess.current = true;
+
+      if (selectedFile && state.data.uc_id && state.data.mes_referencia) {
+        // Arquivo enviado → relatório será gerado automaticamente
+        toast.success("Fatura enviada! Gerando relatório automaticamente...");
+        startPolling(state.data.uc_id, state.data.mes_referencia);
+      } else {
+        // Sem arquivo → só redirecionar
+        toast.success("Fatura salva com sucesso!", {
+          description: "Redirecionando para a lista de faturas...",
+        });
+        setTimeout(() => {
+          router.push("/admin/faturas");
+        }, 1500);
+      }
     }
     if (state?.error) {
       toast.error(state.error);
     }
-  }, [state, router]);
+  }, [state, router, selectedFile, startPolling]);
+
+  // Redirecionar quando processamento concluir com sucesso
+  useEffect(() => {
+    if (processingStatus === "success") {
+      toast.success("Relatório gerado com sucesso!");
+      setTimeout(() => {
+        router.push("/admin/faturas");
+      }, 2000);
+    }
+  }, [processingStatus, router]);
 
   const ucsFiltradas = clienteId
     ? ucs.filter((uc) => uc.empresa?.id === clienteId)
@@ -176,6 +196,51 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
   }));
 
   return (
+    <>
+      {processingStatus === "polling" && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
+          <Loader2 className="h-5 w-5 shrink-0 animate-spin text-orange-500" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-orange-800">
+              Relatório em processamento
+            </p>
+            <p className="text-xs text-orange-600">
+              Aguardando geração automática. Você será notificado quando concluir.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {processingStatus === "success" && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />
+          <p className="flex-1 text-sm font-medium text-emerald-800">
+            Relatório gerado com sucesso! Redirecionando...
+          </p>
+        </div>
+      )}
+
+      {processingStatus === "timeout" && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-red-500" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-red-800">
+              Tempo limite excedido
+            </p>
+            <p className="text-xs text-red-600">
+              O relatório não foi gerado em 5 minutos. Verifique na aba de relatórios.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={dismiss}
+            className="shrink-0 rounded p-1 text-red-400 hover:bg-red-100 hover:text-red-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
     <form action={formAction}>
       {state?.error && (
         <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-600">
@@ -328,7 +393,7 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
         </Card>
 
         <div className="flex gap-3">
-          <Button type="submit" disabled={isPending}>
+          <Button type="submit" disabled={isPending || processingStatus === "polling"}>
             {isPending ? "Salvando..." : "Inserir fatura"}
           </Button>
           <Button type="button" variant="outline" onClick={() => router.back()}>
@@ -337,5 +402,6 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
         </div>
       </div>
     </form>
+    </>
   );
 }

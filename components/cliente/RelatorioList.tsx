@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency, formatKWh, formatMesReferencia, formatDateTime } from "@/lib/utils";
+import { formatCurrency, formatKWh, formatMesReferencia, formatDateTime, gerarNomeRelatorio } from "@/lib/utils";
 import { PerformanceIndicator } from "@/components/cliente/PerformanceIndicator";
 import { FileText, Download, Search, Filter } from "lucide-react";
 
@@ -29,6 +29,7 @@ interface Relatorio {
   pdf_url: string | null;
   created_at: string;
   uc: { id: string; codigo_uc: string } | null;
+  empresa: { id: string; nome: string } | null;
 }
 
 interface UCOption {
@@ -227,12 +228,35 @@ export function RelatorioList({ relatorios, ucOptions = [] }: RelatorioListProps
             </div>
 
             {rel.pdf_url ? (
-              <a href={rel.pdf_url} target="_blank" rel="noopener noreferrer">
-                <Button variant="outline" size="sm">
-                  <Download className="mr-2 h-4 w-4" />
-                  PDF
-                </Button>
-              </a>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  const nomeArquivo = gerarNomeRelatorio(
+                    rel.mes_referencia,
+                    rel.tipo_relatorio || "estimado",
+                    rel.empresa?.nome || "Cliente"
+                  );
+                  try {
+                    const response = await fetch(rel.pdf_url!);
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.download = nomeArquivo;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(url);
+                  } catch (error) {
+                    console.error("Erro ao baixar PDF:", error);
+                    window.open(rel.pdf_url!, "_blank");
+                  }
+                }}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                PDF
+              </Button>
             ) : (
               <Button variant="outline" size="sm" disabled>
                 <Download className="mr-2 h-4 w-4" />

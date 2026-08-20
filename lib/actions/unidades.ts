@@ -364,6 +364,46 @@ export async function arquivarUC(
 export async function getUCs(search?: string, empresaId?: string, status?: string) {
   const supabase = await createServerClient();
 
+  // Se há busca, usar função RPC com unaccent para obter IDs
+  if (search) {
+    const { data: searchResults, error: searchError } = await supabase.rpc(
+      "search_ucs_unaccent",
+      { search_term: search }
+    );
+
+    if (searchError || !searchResults || searchResults.length === 0) {
+      return [];
+    }
+
+    const matchingIds = searchResults.map((uc) => uc.id);
+
+    // Query completa com os IDs encontrados
+    let query = supabase
+      .from("unidades_consumidoras")
+      .select("id, codigo_uc, titular, distribuidora, potencia_instalada_kwp, cidade, estado, ativa, arquivada, empresa_id, modelo_inversores, data_instalacao, geracao_estimada_mensal_kwh, station_id, grupo_tarifario, subgrupo, concessionaria_sigla, modalidade_tarifaria_aneel, empresa:empresas(id, nome)")
+      .in("id", matchingIds)
+      .order("codigo_uc");
+
+    if (status === "ativas") {
+      query = query.eq("ativa", true).eq("arquivada", false);
+    } else if (status === "inativas") {
+      query = query.eq("ativa", false).eq("arquivada", false);
+    } else if (status === "arquivadas") {
+      query = query.eq("arquivada", true);
+    } else {
+      query = query.eq("arquivada", false);
+    }
+
+    if (empresaId) {
+      query = query.eq("empresa_id", empresaId);
+    }
+
+    const { data, error } = await query;
+    if (error) return [];
+    return data;
+  }
+
+  // Sem busca: query normal
   let query = supabase
     .from("unidades_consumidoras")
     .select("id, codigo_uc, titular, distribuidora, potencia_instalada_kwp, cidade, estado, ativa, arquivada, empresa_id, modelo_inversores, data_instalacao, geracao_estimada_mensal_kwh, station_id, grupo_tarifario, subgrupo, concessionaria_sigla, modalidade_tarifaria_aneel, empresa:empresas(id, nome)")
@@ -383,12 +423,7 @@ export async function getUCs(search?: string, empresaId?: string, status?: strin
     query = query.eq("empresa_id", empresaId);
   }
 
-  if (search) {
-    query = query.or(`codigo_uc.ilike.%${search}%,titular.ilike.%${search}%,distribuidora.ilike.%${search}%`);
-  }
-
   const { data, error } = await query;
-
   if (error) return [];
   return data;
 }
@@ -449,7 +484,7 @@ interface SolisUCData {
   potencia_instalada_kwp: number;
   qtd_inversores: number;
   modelo_inversores: string[];
-  potencia_inversor_kw: number;
+  potencia_inversor_kwp: number;
   data_instalacao_iso: string | null;
   cidade_uf: string | null;
 }
@@ -540,7 +575,7 @@ export async function vincularSolisUC(
         potencia_instalada_kwp: solisData.potencia_instalada_kwp,
         quantidade_inversores: solisData.qtd_inversores,
         modelo_inversores: solisData.modelo_inversores.join(", "),
-        potencia_inversor_kw: solisData.potencia_inversor_kw,
+        potencia_inversor_kw: solisData.potencia_inversor_kwp,
         data_instalacao: solisData.data_instalacao_iso,
       })
       .eq("id", ucArquivada.id);
@@ -581,7 +616,7 @@ export async function vincularSolisUC(
       potencia_instalada_kwp: solisData.potencia_instalada_kwp,
       quantidade_inversores: solisData.qtd_inversores,
       modelo_inversores: solisData.modelo_inversores.join(", "),
-      potencia_inversor_kw: solisData.potencia_inversor_kw,
+      potencia_inversor_kw: solisData.potencia_inversor_kwp,
       data_instalacao: solisData.data_instalacao_iso,
       station_id: solisData.station_id,
       cidade,
@@ -613,7 +648,7 @@ export async function vincularStationAUC(
   ucId: string,
   stationId: string,
   provider: "solis" | "sungrow",
-  stationData?: { potencia_kwp: number; qtd_inversores: number }
+  stationData?: { potencia_kw: number; qtd_inversores: number }
 ): Promise<ActionResult> {
   const supabase = await createServerClient();
 
@@ -656,7 +691,7 @@ export async function vincularStationAUC(
       await supabase
         .from("unidades_consumidoras")
         .update({
-          potencia_instalada_kwp: (ucAtual.potencia_instalada_kwp ?? 0) + stationData.potencia_kwp,
+          potencia_instalada_kwp: (ucAtual.potencia_instalada_kwp ?? 0) + stationData.potencia_kw,
           quantidade_inversores: (ucAtual.quantidade_inversores ?? 0) + stationData.qtd_inversores,
         })
         .eq("id", ucId);

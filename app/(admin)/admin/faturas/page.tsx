@@ -26,16 +26,23 @@ export default async function FaturasPage({ searchParams }: Props) {
       .eq("arquivado", false),
   ]);
 
-  const relatoriosMap: Record<string, { id: string; pdf_url: string | null; status_envio: string; tipo_relatorio: string }> = {};
+  const relatoriosMap: Record<string, { id: string; pdf_url: string | null; status_envio: string; tipo_relatorio: string; mes_referencia: string }> = {};
   if (relatorios) {
     for (const rel of relatorios) {
       const key = `${rel.uc_id}|${rel.mes_referencia}`;
-      relatoriosMap[key] = {
-        id: rel.id,
-        pdf_url: rel.pdf_url,
-        status_envio: rel.status_envio,
-        tipo_relatorio: rel.tipo_relatorio,
-      };
+      const existing = relatoriosMap[key];
+
+      // Priorizar relatório "real" se já houver um "estimado"
+      // Só sobrescrever se for "real" ou se ainda não existe
+      if (!existing || rel.tipo_relatorio === "real") {
+        relatoriosMap[key] = {
+          id: rel.id,
+          pdf_url: rel.pdf_url,
+          status_envio: rel.status_envio,
+          tipo_relatorio: rel.tipo_relatorio,
+          mes_referencia: rel.mes_referencia,
+        };
+      }
     }
   }
 

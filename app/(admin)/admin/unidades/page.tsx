@@ -149,6 +149,7 @@ export default async function UnidadesPage({ searchParams }: Props) {
           ucs={filterUCs(solis.data, params, vinculadas)}
           error={solis.error}
           vinculadas={vinculadas}
+          empresas={empresas.map((e) => ({ id: e.id, nome: e.nome }))}
         />
       </div>
 
@@ -165,6 +166,7 @@ export default async function UnidadesPage({ searchParams }: Props) {
           ucs={filterUCs(sungrow.data, params, vinculadas)}
           error={sungrow.error}
           vinculadas={vinculadas}
+          empresas={empresas.map((e) => ({ id: e.id, nome: e.nome }))}
         />
       </div>
     </div>
