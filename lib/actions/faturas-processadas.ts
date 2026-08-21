@@ -252,7 +252,7 @@ export async function regenerarRelatorioPDF(fpId: string): Promise<ActionResult>
 
   const { data: fp, error: fetchError } = await supabase
     .from("faturas_processadas")
-    .select("*, uc:unidades_consumidoras(id, codigo_uc, titular, distribuidora, subgrupo, modalidade_tarifaria, enquadramento_tarifario, potencia_instalada_kwp, empresa:empresas(id, nome))")
+    .select("*, uc:unidades_consumidoras(id, codigo_uc, titular, distribuidora, subgrupo, modalidade_tarifaria, enquadramento_tarifario, potencia_instalada_kw, empresa:empresas(id, nome))")
     .eq("id", fpId)
     .single();
 

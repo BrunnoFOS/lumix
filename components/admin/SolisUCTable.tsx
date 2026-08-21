@@ -123,7 +123,7 @@ export function SolisUCTable({
     const result = await vincularSolisUC(selectedEmpresaId, {
       station_id: selectedUsina.station_id,
       station_name: selectedUsina.station_name,
-      potencia_instalada_kwp: selectedUsina.potencia_instalada_kwp,
+      potencia_instalada_kw: selectedUsina.potencia_instalada_kwp,
       qtd_inversores: selectedUsina.qtd_inversores,
       modelo_inversores: selectedUsina.modelo_inversores,
       potencia_inversor_kwp: selectedUsina.potencia_inversor_kwp,
@@ -197,7 +197,7 @@ export function SolisUCTable({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className="font-medium">{uc.potencia_instalada_kw}</span>
+                    <span className="font-medium">{uc.potencia_instalada_kwp}</span>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5">

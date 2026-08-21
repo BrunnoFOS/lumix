@@ -133,7 +133,7 @@ export default async function UnidadesPage({ searchParams }: Props) {
       </div>
 
       <Suspense>
-        <UCSearch empresas={empresas.map((e) => ({ id: e.id, nome: e.nome }))} />
+        <UCSearch empresas={empresas.map((e: { id: string; nome: string }) => ({ id: e.id, nome: e.nome }))} />
       </Suspense>
 
       {/* Usinas Solis */}
@@ -149,7 +149,7 @@ export default async function UnidadesPage({ searchParams }: Props) {
           ucs={filterUCs(solis.data, params, vinculadas)}
           error={solis.error}
           vinculadas={vinculadas}
-          empresas={empresas.map((e) => ({ id: e.id, nome: e.nome }))}
+          empresas={empresas.map((e: { id: string; nome: string }) => ({ id: e.id, nome: e.nome }))}
         />
       </div>
 
@@ -166,7 +166,7 @@ export default async function UnidadesPage({ searchParams }: Props) {
           ucs={filterUCs(sungrow.data, params, vinculadas)}
           error={sungrow.error}
           vinculadas={vinculadas}
-          empresas={empresas.map((e) => ({ id: e.id, nome: e.nome }))}
+          empresas={empresas.map((e: { id: string; nome: string }) => ({ id: e.id, nome: e.nome }))}
         />
       </div>
     </div>

@@ -77,7 +77,7 @@ export async function calcularGeracaoEstimadaUC(
   const { data: uc, error: ucError } = await supabase
     .from("unidades_consumidoras")
     .select(
-      "potencia_instalada_kwp, cidade, estado, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, data_instalacao, data_inicio_degradacao"
+      "potencia_instalada_kw, cidade, estado, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, data_instalacao, data_inicio_degradacao"
     )
     .eq("id", ucId)
     .single();
@@ -118,7 +118,7 @@ export async function calcularGeracaoEstimadaUC(
   // Calcular geração estimada
   const dias = diasNoMes(ano, mes);
   const geracaoEstimada = calcularGeracaoEstimada({
-    potenciaKwp: Number(uc.potencia_instalada_kwp),
+    potenciaKwp: Number(uc.potencia_instalada_kw),
     ghiWhM2Dia: ghi,
     diasNoMes: dias,
     fatorRendimento: Number(uc.fator_rendimento),

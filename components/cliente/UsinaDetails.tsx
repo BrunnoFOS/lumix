@@ -452,7 +452,7 @@ export function UsinaDetails({ ucs, inversoresData = [], stationsData = {}, tota
                               {inv.model || inv.product_model || `Inversor ${idx + 1}`}
                             </span>
                             <span className="text-xs text-muted-foreground">
-                              SN: {inv.sn} &middot; {inv.power_kw} kW
+                              SN: {inv.sn} &middot; {inv.power_kwp} kW
                             </span>
                           </div>
                           <Badge variant={status.variant}>{status.label}</Badge>

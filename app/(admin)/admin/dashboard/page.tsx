@@ -137,7 +137,7 @@ async function GeracaoMensalSection() {
 
   if (ucsComStations.length === 0) return null;
 
-  const empresasOptions = empresasList.map((e) => ({ id: e.id, nome: e.nome }));
+  const empresasOptions = empresasList.map((e: { id: string; nome: string }) => ({ id: e.id, nome: e.nome }));
   return <SolisGeracaoMensal empresas={empresasOptions} ucs={ucsComStations} />;
 }
 

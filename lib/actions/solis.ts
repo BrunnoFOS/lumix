@@ -857,7 +857,7 @@ export async function gerarRelatorioSolis(
       // Buscar campos faltantes para exibição no frontend
       const { data: ucParaValidar } = await supabase
         .from("unidades_consumidoras")
-        .select("potencia_instalada_kwp, cidade, estado, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, data_instalacao, data_inicio_degradacao")
+        .select("potencia_instalada_kw, cidade, estado, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, data_instalacao, data_inicio_degradacao")
         .eq("id", ucId)
         .single();
 

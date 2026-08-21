@@ -63,7 +63,7 @@ export default async function FaturasPage({ searchParams }: Props) {
 
       <Suspense>
         <FaturaSearch
-          empresas={empresas.map((e) => ({ id: e.id, nome: e.nome }))}
+          empresas={empresas.map((e: { id: string; nome: string }) => ({ id: e.id, nome: e.nome }))}
         />
       </Suspense>
 

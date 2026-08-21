@@ -65,7 +65,7 @@ export interface UnidadeConsumidora {
   distribuidora: string;
   enquadramento_tarifario: EnquadramentoTarifario;
   modalidade_tarifaria: ModalidadeTarifaria;
-  potencia_instalada_kwp: number;
+  potencia_instalada_kw: number;
   quantidade_inversores: number;
   modelo_inversores: string | null;
   potencia_inversor_kw: number | null;

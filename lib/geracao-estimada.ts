@@ -173,7 +173,7 @@ export function formatarPR(prPercent: number): string {
 }
 
 export interface UCParaEstimativa {
-  potencia_instalada_kwp: number | null;
+  potencia_instalada_kw: number | null;
   cidade: string | null;
   estado: string | null;
   fator_rendimento: number | null;
@@ -191,7 +191,7 @@ export function validarUCParaEstimativa(
 ): { valid: true } | { valid: false; camposFaltantes: string[] } {
   const faltantes: string[] = [];
 
-  if (!uc.potencia_instalada_kwp) faltantes.push("Potência instalada (kW)");
+  if (!uc.potencia_instalada_kw) faltantes.push("Potência instalada (kW)");
   if (!uc.cidade) faltantes.push("Cidade");
   if (!uc.estado) faltantes.push("Estado");
   if (uc.fator_rendimento == null) faltantes.push("Fator de rendimento");

@@ -34,7 +34,7 @@ export default async function NovaFaturaPage() {
 
       <FaturaForm
         ucs={ucs}
-        clientes={empresas.map((e) => ({ id: e.id, nome: e.nome }))}
+        clientes={empresas.map((e: { id: string; nome: string }) => ({ id: e.id, nome: e.nome }))}
       />
     </div>
   );

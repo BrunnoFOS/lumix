@@ -30,14 +30,14 @@ export async function createUC(formData: FormData): Promise<ActionResult> {
   const titular = formData.get("titular") as string;
   const distribuidora = formData.get("distribuidora") as string;
   const enquadramento_tarifario = formData.get("enquadramento_tarifario") as EnquadramentoTarifario;
-  const potencia_instalada_kwp = parseDecimal(formData.get("potencia_instalada_kwp") as string);
+  const potencia_instalada_kw = parseDecimal(formData.get("potencia_instalada_kw") as string);
   const quantidade_inversores = parseInt_(formData.get("quantidade_inversores") as string);
 
   if (!empresa_id || !codigo_uc || !titular || !enquadramento_tarifario) {
     return { error: "Campos obrigatórios: empresa, código UC, titular e enquadramento." };
   }
 
-  if (!potencia_instalada_kwp || potencia_instalada_kwp <= 0) {
+  if (!potencia_instalada_kw || potencia_instalada_kw <= 0) {
     return { error: "Potência instalada deve ser maior que zero." };
   }
 
@@ -57,7 +57,7 @@ export async function createUC(formData: FormData): Promise<ActionResult> {
       distribuidora,
       enquadramento_tarifario,
       modalidade_tarifaria: (formData.get("modalidade_tarifaria") as string) || null,
-      potencia_instalada_kwp,
+      potencia_instalada_kw,
       quantidade_inversores,
       modelo_inversores: (formData.get("modelo_inversores") as string) || null,
       potencia_inversor_kw: parseDecimal(formData.get("potencia_inversor_kw") as string),
@@ -91,14 +91,14 @@ export async function updateUC(
   const titular = formData.get("titular") as string;
   const distribuidora = formData.get("distribuidora") as string;
   const enquadramento_tarifario = formData.get("enquadramento_tarifario") as EnquadramentoTarifario;
-  const potencia_instalada_kwp = parseDecimal(formData.get("potencia_instalada_kwp") as string);
+  const potencia_instalada_kw = parseDecimal(formData.get("potencia_instalada_kw") as string);
   const quantidade_inversores = parseInt_(formData.get("quantidade_inversores") as string);
 
   if (!codigo_uc || !titular || !enquadramento_tarifario) {
     return { error: "Campos obrigatórios não preenchidos." };
   }
 
-  if (!potencia_instalada_kwp || potencia_instalada_kwp <= 0) {
+  if (!potencia_instalada_kw || potencia_instalada_kw <= 0) {
     return { error: "Potência instalada deve ser maior que zero." };
   }
 
@@ -117,7 +117,7 @@ export async function updateUC(
       distribuidora,
       enquadramento_tarifario,
       modalidade_tarifaria: (formData.get("modalidade_tarifaria") as string) || null,
-      potencia_instalada_kwp,
+      potencia_instalada_kw,
       quantidade_inversores,
       modelo_inversores: (formData.get("modelo_inversores") as string) || null,
       potencia_inversor_kw: parseDecimal(formData.get("potencia_inversor_kw") as string),
@@ -375,12 +375,12 @@ export async function getUCs(search?: string, empresaId?: string, status?: strin
       return [];
     }
 
-    const matchingIds = searchResults.map((uc) => uc.id);
+    const matchingIds = searchResults.map((uc: { id: string }) => uc.id);
 
     // Query completa com os IDs encontrados
     let query = supabase
       .from("unidades_consumidoras")
-      .select("id, codigo_uc, titular, distribuidora, potencia_instalada_kwp, cidade, estado, ativa, arquivada, empresa_id, modelo_inversores, data_instalacao, geracao_estimada_mensal_kwh, station_id, grupo_tarifario, subgrupo, concessionaria_sigla, modalidade_tarifaria_aneel, empresa:empresas(id, nome)")
+      .select("id, codigo_uc, titular, distribuidora, potencia_instalada_kw, cidade, estado, ativa, arquivada, empresa_id, modelo_inversores, data_instalacao, geracao_estimada_mensal_kwh, station_id, grupo_tarifario, subgrupo, concessionaria_sigla, modalidade_tarifaria_aneel, empresa:empresas(id, nome)")
       .in("id", matchingIds)
       .order("codigo_uc");
 
@@ -406,7 +406,7 @@ export async function getUCs(search?: string, empresaId?: string, status?: strin
   // Sem busca: query normal
   let query = supabase
     .from("unidades_consumidoras")
-    .select("id, codigo_uc, titular, distribuidora, potencia_instalada_kwp, cidade, estado, ativa, arquivada, empresa_id, modelo_inversores, data_instalacao, geracao_estimada_mensal_kwh, station_id, grupo_tarifario, subgrupo, concessionaria_sigla, modalidade_tarifaria_aneel, empresa:empresas(id, nome)")
+    .select("id, codigo_uc, titular, distribuidora, potencia_instalada_kw, cidade, estado, ativa, arquivada, empresa_id, modelo_inversores, data_instalacao, geracao_estimada_mensal_kwh, station_id, grupo_tarifario, subgrupo, concessionaria_sigla, modalidade_tarifaria_aneel, empresa:empresas(id, nome)")
     .order("codigo_uc");
 
   if (status === "ativas") {
@@ -481,7 +481,7 @@ export async function getUCsComStations() {
 interface SolisUCData {
   station_id: string;
   station_name: string;
-  potencia_instalada_kwp: number;
+  potencia_instalada_kw: number;
   qtd_inversores: number;
   modelo_inversores: string[];
   potencia_inversor_kwp: number;
@@ -572,7 +572,7 @@ export async function vincularSolisUC(
         ativa: true,
         arquivada: false,
         station_id: solisData.station_id,
-        potencia_instalada_kwp: solisData.potencia_instalada_kwp,
+        potencia_instalada_kw: solisData.potencia_instalada_kw,
         quantidade_inversores: solisData.qtd_inversores,
         modelo_inversores: solisData.modelo_inversores.join(", "),
         potencia_inversor_kw: solisData.potencia_inversor_kwp,
@@ -613,7 +613,7 @@ export async function vincularSolisUC(
       distribuidora: provider === "sungrow" ? "SunGrow" : "Solis",
       enquadramento_tarifario: "trifasico",
       modalidade_tarifaria: "convencional",
-      potencia_instalada_kwp: solisData.potencia_instalada_kwp,
+      potencia_instalada_kw: solisData.potencia_instalada_kw,
       quantidade_inversores: solisData.qtd_inversores,
       modelo_inversores: solisData.modelo_inversores.join(", "),
       potencia_inversor_kw: solisData.potencia_inversor_kwp,
@@ -683,7 +683,7 @@ export async function vincularStationAUC(
   if (stationData) {
     const { data: ucAtual } = await supabase
       .from("unidades_consumidoras")
-      .select("potencia_instalada_kwp, quantidade_inversores")
+      .select("potencia_instalada_kw, quantidade_inversores")
       .eq("id", ucId)
       .single();
 
@@ -691,7 +691,7 @@ export async function vincularStationAUC(
       await supabase
         .from("unidades_consumidoras")
         .update({
-          potencia_instalada_kwp: (ucAtual.potencia_instalada_kwp ?? 0) + stationData.potencia_kw,
+          potencia_instalada_kw: (ucAtual.potencia_instalada_kw ?? 0) + stationData.potencia_kw,
           quantidade_inversores: (ucAtual.quantidade_inversores ?? 0) + stationData.qtd_inversores,
         })
         .eq("id", ucId);

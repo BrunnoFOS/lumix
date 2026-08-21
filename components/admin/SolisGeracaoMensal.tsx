@@ -336,7 +336,7 @@ export function SolisGeracaoMensal({ empresas, ucs }: Props) {
                 {data.usina.station_name}
               </h3>
               <p className="text-sm text-muted-foreground">
-                {data.periodo.mes_extenso} &middot; {data.usina.capacity_kw} kW
+                {data.periodo.mes_extenso} &middot; {data.usina.capacity_kwp} kW
                 &middot; {data.periodo.data_inicio_br} a {data.periodo.data_fim_br}
               </p>
             </div>
