@@ -33,7 +33,7 @@ interface UC {
   id: string;
   codigo_uc: string;
   distribuidora: string;
-  potencia_instalada_kw: number;
+  potencia_instalada_kwp: number;
   ativa: boolean;
   arquivada: boolean;
   station_id: string | null;
@@ -149,7 +149,7 @@ export function ClienteUCSection({
                       )}
                     </TableCell>
                     <TableCell>{uc.distribuidora || "—"}</TableCell>
-                    <TableCell>{uc.potencia_instalada_kw}</TableCell>
+                    <TableCell>{uc.potencia_instalada_kwp}</TableCell>
                     <TableCell>
                       {uc.usina_status === "online" ? (
                         <Badge variant="default" className="bg-emerald-500 hover:bg-emerald-600 gap-1">

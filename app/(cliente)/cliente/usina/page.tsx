@@ -18,7 +18,7 @@ export default async function UsinaPage() {
   // Fetch UCs first (needed for uc_stations query)
   const { data: ucs } = await supabase
     .from("unidades_consumidoras")
-    .select("id, codigo_uc, titular, endereco, cidade, estado, distribuidora, enquadramento_tarifario, modalidade_tarifaria, grupo_tarifario, subgrupo, potencia_instalada_kw, quantidade_modulos, modelo_modulos, potencia_modulo_w, quantidade_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, geracao_estimada_mensal_kwh, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, data_inicio_degradacao, ativa, observacoes")
+    .select("id, codigo_uc, titular, endereco, cidade, estado, distribuidora, enquadramento_tarifario, modalidade_tarifaria, grupo_tarifario, subgrupo, potencia_instalada_kwp, quantidade_modulos, modelo_modulos, potencia_modulo_w, quantidade_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, geracao_estimada_mensal_kwh, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, data_inicio_degradacao, ativa, observacoes")
     .eq("empresa_id", profile.empresa_id)
     .eq("ativa", true)
     .order("codigo_uc");
@@ -26,7 +26,7 @@ export default async function UsinaPage() {
   // Mapear campos do banco para interface do componente
   const ucsList = (ucs ?? []).map((uc) => ({
     ...uc,
-    potencia_instalada_kw: uc.potencia_instalada_kw,
+    potencia_instalada_kwp: uc.potencia_instalada_kwp,
     potencia_inversor_kw: uc.potencia_inversor_kw,
   }));
   const ucIds = ucsList.map((uc) => uc.id);
@@ -44,7 +44,7 @@ export default async function UsinaPage() {
   const { data: usinasCache } = stationIds.length > 0
     ? await supabase
         .from("usinas_cache")
-        .select("station_id, station_name, cidade_uf, potencia_instalada_kw, qtd_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, synced_at")
+        .select("station_id, station_name, cidade_uf, potencia_instalada_kwp, qtd_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, synced_at")
         .in("station_id", stationIds)
     : { data: [] as never[] };
 
@@ -70,7 +70,7 @@ export default async function UsinaPage() {
       provider: st.provider,
       station_name: cached?.station_name ?? "",
       cidade_uf: cached?.cidade_uf ?? null,
-      potencia_kw: cached?.potencia_instalada_kw ?? 0,
+      potencia_kw: cached?.potencia_instalada_kwp ?? 0,
       qtd_inversores: cached?.qtd_inversores ?? 0,
       modelo_inversores: cached?.modelo_inversores ?? null,
       potencia_inversor_kw: cached?.potencia_inversor_kw ?? null,
@@ -88,7 +88,7 @@ export default async function UsinaPage() {
   }
 
   // Totais para o resumo
-  const totalPotencia = ucsList.reduce((sum, uc) => sum + (uc.potencia_instalada_kw ?? 0), 0);
+  const totalPotencia = ucsList.reduce((sum, uc) => sum + (uc.potencia_instalada_kwp ?? 0), 0);
   const totalModulos = ucsList.reduce((sum, uc) => sum + (uc.quantidade_modulos ?? 0), 0);
   const totalInversores = ucsList.reduce((sum, uc) => sum + (uc.quantidade_inversores ?? 0), 0);
 

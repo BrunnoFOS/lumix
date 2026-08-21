@@ -28,7 +28,7 @@ interface UCData {
   modalidade_tarifaria: string;
   grupo_tarifario: string | null;
   subgrupo: string | null;
-  potencia_instalada_kw: number;
+  potencia_instalada_kwp: number;
   quantidade_modulos: number | null;
   modelo_modulos: string | null;
   potencia_modulo_w: number | null;
@@ -306,7 +306,7 @@ export function UsinaDetails({ ucs, inversoresData = [], stationsData = {}, tota
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <InfoRow label="Potência instalada" value={`${uc.potencia_instalada_kw} kW`} />
+                  <InfoRow label="Potência instalada" value={`${uc.potencia_instalada_kwp} kW`} />
                   <InfoRow label="Quantidade" value={uc.quantidade_modulos ? `${uc.quantidade_modulos} módulos` : null} />
                   <InfoRow label="Modelo" value={uc.modelo_modulos} />
                   <InfoRow label="Potência/módulo" value={uc.potencia_modulo_w ? `${uc.potencia_modulo_w} W` : null} />

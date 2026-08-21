@@ -211,7 +211,7 @@ describe("formatarPR", () => {
 
 describe("validarUCParaEstimativa", () => {
   const ucCompleta = {
-    potencia_instalada_kw: 100,
+    potencia_instalada_kwp: 100,
     cidade: "São Paulo",
     estado: "SP",
     fator_rendimento: 0.95,
@@ -275,7 +275,7 @@ describe("validarUCParaEstimativa", () => {
 
   it("retorna todos os campos quando UC está vazia", () => {
     const result = validarUCParaEstimativa({
-      potencia_instalada_kw: null,
+      potencia_instalada_kwp: null,
       cidade: null,
       estado: null,
       fator_rendimento: null,

@@ -197,7 +197,7 @@ export async function getUCsCliente(empresaIds: string | string[]) {
 
   const { data, error } = await supabase
     .from("unidades_consumidoras")
-    .select("id, codigo_uc, titular, endereco, cidade, estado, distribuidora, enquadramento_tarifario, modalidade_tarifaria, potencia_instalada_kw, quantidade_modulos, modelo_modulos, potencia_modulo_w, quantidade_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, geracao_estimada_mensal_kwh, ativa, observacoes")
+    .select("id, codigo_uc, titular, endereco, cidade, estado, distribuidora, enquadramento_tarifario, modalidade_tarifaria, potencia_instalada_kwp, quantidade_modulos, modelo_modulos, potencia_modulo_w, quantidade_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, geracao_estimada_mensal_kwh, ativa, observacoes")
     .in("empresa_id", ids)
     .eq("ativa", true)
     .order("codigo_uc");

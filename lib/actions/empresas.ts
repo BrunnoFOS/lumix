@@ -190,7 +190,7 @@ export async function getEmpresaComRelacionamentos(id: string) {
       .single(),
     supabase
       .from("unidades_consumidoras")
-      .select("id, codigo_uc, potencia_instalada_kw, ativa, arquivada, station_id, distribuidora")
+      .select("id, codigo_uc, potencia_instalada_kwp, ativa, arquivada, station_id, distribuidora")
       .eq("empresa_id", id)
       .order("ativa", { ascending: false })
       .order("codigo_uc"),
@@ -209,9 +209,9 @@ export async function getEmpresaComRelacionamentos(id: string) {
   const { data: cacheRows } = allStationIds.length > 0
     ? await supabase
         .from("usinas_cache")
-        .select("station_id, station_name, potencia_instalada_kw, inversores_detalhe")
+        .select("station_id, station_name, potencia_instalada_kwp, inversores_detalhe")
         .in("station_id", allStationIds)
-    : { data: [] as { station_id: string; station_name: string; potencia_instalada_kw: number; inversores_detalhe: { state: number }[] | null }[] };
+    : { data: [] as { station_id: string; station_name: string; potencia_instalada_kwp: number; inversores_detalhe: { state: number }[] | null }[] };
 
   const cacheMap = new Map((cacheRows ?? []).map((r) => [r.station_id, r]));
 
@@ -261,7 +261,7 @@ export async function getEmpresaComRelacionamentos(id: string) {
         expandedUcs.push({
           ...uc,
           codigo_uc: stationName,
-          potencia_instalada_kw: cache?.potencia_instalada_kw ?? uc.potencia_instalada_kw,
+          potencia_instalada_kwp: cache?.potencia_instalada_kwp ?? uc.potencia_instalada_kwp,
           distribuidora: station.provider === "sungrow" ? "SunGrow" : "Solis",
           is_station_adicional: true,
           station_id_adicional: station.station_id,

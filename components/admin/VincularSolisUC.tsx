@@ -113,7 +113,7 @@ export function VincularSolisUC({
     const result = await vincularSolisUC(empresaId, {
       station_id: uc.station_id,
       station_name: uc.station_name,
-      potencia_instalada_kw: uc.potencia_instalada_kwp,
+      potencia_instalada_kwp: uc.potencia_instalada_kwp,
       qtd_inversores: uc.qtd_inversores,
       modelo_inversores: uc.modelo_inversores,
       potencia_inversor_kwp: uc.potencia_inversor_kwp,

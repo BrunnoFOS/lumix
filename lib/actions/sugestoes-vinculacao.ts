@@ -127,14 +127,14 @@ export async function confirmarSugestao(sugestaoId: string): Promise<ActionResul
   // Somar potência e inversores da station à UC
   const { data: cache } = await supabase
     .from("usinas_cache")
-    .select("potencia_instalada_kw, qtd_inversores")
+    .select("potencia_instalada_kwp, qtd_inversores")
     .eq("station_id", sugestao.station_id)
     .maybeSingle();
 
   if (cache) {
     const { data: ucAtual } = await supabase
       .from("unidades_consumidoras")
-      .select("potencia_instalada_kw, quantidade_inversores")
+      .select("potencia_instalada_kwp, quantidade_inversores")
       .eq("id", sugestao.uc_id)
       .single();
 
@@ -142,7 +142,7 @@ export async function confirmarSugestao(sugestaoId: string): Promise<ActionResul
       await supabase
         .from("unidades_consumidoras")
         .update({
-          potencia_instalada_kw: (ucAtual.potencia_instalada_kw ?? 0) + cache.potencia_instalada_kw,
+          potencia_instalada_kwp: (ucAtual.potencia_instalada_kwp ?? 0) + cache.potencia_instalada_kwp,
           quantidade_inversores: (ucAtual.quantidade_inversores ?? 0) + cache.qtd_inversores,
         })
         .eq("id", sugestao.uc_id);
