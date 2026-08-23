@@ -47,6 +47,7 @@ import { formatCurrency, formatKWh, formatMesReferencia, formatDateTime, gerarNo
 import {
   updateRelatorioStatus,
   arquivarRelatorio,
+  desarquivarRelatorio,
   updateRelatorioAnexo,
 } from "@/lib/actions/relatorios";
 import { createClient } from "@/lib/supabase/client";
@@ -65,6 +66,7 @@ interface RelatorioRow {
   tipo_relatorio: string;
   pdf_url: string | null;
   created_at: string;
+  arquivado: boolean;
   uc: { id: string; codigo_uc: string } | null;
   empresa: { id: string; nome: string } | null;
 }
@@ -130,6 +132,15 @@ export function RelatorioTable({
 
   async function handleArquivar(id: string) {
     const result = await arquivarRelatorio(id);
+    if (result.error) {
+      alert(result.error);
+      return;
+    }
+    router.refresh();
+  }
+
+  async function handleDesarquivar(id: string) {
+    const result = await desarquivarRelatorio(id);
     if (result.error) {
       alert(result.error);
       return;
@@ -406,6 +417,15 @@ export function RelatorioTable({
                               Arquivar
                             </DropdownMenuItem>
                           </>
+                        )}
+                        {rel.arquivado && (
+                          <DropdownMenuItem
+                            onClick={() => handleDesarquivar(rel.id)}
+                            className="text-green-600 focus:text-green-600"
+                          >
+                            <Archive className="mr-2 h-4 w-4" />
+                            Desarquivar
+                          </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>

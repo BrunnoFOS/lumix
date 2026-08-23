@@ -288,6 +288,24 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
                 required
               />
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="inicio_ciclo">Início do ciclo</Label>
+              <Input
+                id="inicio_ciclo"
+                name="inicio_ciclo"
+                type="date"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="fim_ciclo">Fim do ciclo</Label>
+              <Input
+                id="fim_ciclo"
+                name="fim_ciclo"
+                type="date"
+              />
+            </div>
           </CardContent>
         </Card>
 

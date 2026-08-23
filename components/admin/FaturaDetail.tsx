@@ -26,17 +26,14 @@ const FIELD_LABELS: Record<string, string> = {
   inicio_ciclo: "Início do ciclo",
   fim_ciclo: "Fim do ciclo",
   energia_faturada_fp: "Energia faturada FP (kWh)",
-  valor_tarifa_fp: "Tarifa FP (R$/kWh)",
-  kwh_compensado_fp: "kWh compensado FP",
+  valor_tarifa_fp: "Tarifa FP (sem tributos) (R$/kWh)",
   tarifa_compensada_fp: "Tarifa compensada FP (R$/kWh)",
   energia_consumida_fp: "Energia consumida FP (kWh)",
   energia_injetada_fp: "Energia injetada FP (kWh)",
-  valor_faturado: "Valor faturado (R$)",
   valor_total: "Valor total (R$)",
   consumo_kwh: "Consumo (kWh)",
   energia_injetada_kwh: "Energia injetada (kWh)",
   creditos_energia_kwh: "Créditos energia (kWh)",
-  economia_estimada: "Economia estimada (R$)",
   demanda_contratada_kw: "Demanda contratada (kW)",
   valor_tusd: "TUSD (R$)",
   valor_te: "TE (R$)",
@@ -74,18 +71,15 @@ export function FaturaDetail({ fatura }: Props) {
   // Energia Fora Ponta
   const [energiaFaturadaFp, setEnergiaFaturadaFp] = useState(fatura.energia_faturada_fp?.toString() ?? "");
   const [valorTarifaFp, setValorTarifaFp] = useState(fatura.valor_tarifa_fp?.toString() ?? "");
-  const [kwhCompensadoFp, setKwhCompensadoFp] = useState(fatura.kwh_compensado_fp?.toString() ?? "");
   const [tarifaCompensadaFp, setTarifaCompensadaFp] = useState(fatura.tarifa_compensada_fp?.toString() ?? "");
   const [energiaConsumidaFp, setEnergiaConsumidaFp] = useState(fatura.energia_consumida_fp?.toString() ?? "");
   const [energiaInjetadaFp, setEnergiaInjetadaFp] = useState(fatura.energia_injetada_fp?.toString() ?? "");
 
   // Valores e totais
-  const [valorFaturado, setValorFaturado] = useState(fatura.valor_faturado?.toString() ?? "");
   const [valorTotal, setValorTotal] = useState(fatura.valor_total?.toString() ?? "");
   const [consumoKwh, setConsumoKwh] = useState(fatura.consumo_kwh?.toString() ?? "");
   const [energiaInjetadaKwh, setEnergiaInjetadaKwh] = useState(fatura.energia_injetada_kwh?.toString() ?? "");
   const [creditosEnergiaKwh, setCreditosEnergiaKwh] = useState(fatura.creditos_energia_kwh?.toString() ?? "");
-  const [economiaEstimada, setEconomiaEstimada] = useState(fatura.economia_estimada?.toString() ?? "");
 
   // Demanda e tarifas
   const [demandaContratadaKw, setDemandaContratadaKw] = useState(fatura.demanda_contratada_kw?.toString() ?? "");
@@ -99,16 +93,13 @@ export function FaturaDetail({ fatura }: Props) {
     setFimCiclo(fatura.fim_ciclo ?? "");
     setEnergiaFaturadaFp(fatura.energia_faturada_fp?.toString() ?? "");
     setValorTarifaFp(fatura.valor_tarifa_fp?.toString() ?? "");
-    setKwhCompensadoFp(fatura.kwh_compensado_fp?.toString() ?? "");
     setTarifaCompensadaFp(fatura.tarifa_compensada_fp?.toString() ?? "");
     setEnergiaConsumidaFp(fatura.energia_consumida_fp?.toString() ?? "");
     setEnergiaInjetadaFp(fatura.energia_injetada_fp?.toString() ?? "");
-    setValorFaturado(fatura.valor_faturado?.toString() ?? "");
     setValorTotal(fatura.valor_total?.toString() ?? "");
     setConsumoKwh(fatura.consumo_kwh?.toString() ?? "");
     setEnergiaInjetadaKwh(fatura.energia_injetada_kwh?.toString() ?? "");
     setCreditosEnergiaKwh(fatura.creditos_energia_kwh?.toString() ?? "");
-    setEconomiaEstimada(fatura.economia_estimada?.toString() ?? "");
     setDemandaContratadaKw(fatura.demanda_contratada_kw?.toString() ?? "");
     setValorTusd(fatura.valor_tusd?.toString() ?? "");
     setValorTe(fatura.valor_te?.toString() ?? "");
@@ -135,16 +126,13 @@ export function FaturaDetail({ fatura }: Props) {
       fim_ciclo: fimCiclo || null,
       energia_faturada_fp: parseNum(energiaFaturadaFp),
       valor_tarifa_fp: parseNum(valorTarifaFp),
-      kwh_compensado_fp: parseNum(kwhCompensadoFp),
       tarifa_compensada_fp: parseNum(tarifaCompensadaFp),
       energia_consumida_fp: parseNum(energiaConsumidaFp),
       energia_injetada_fp: parseNum(energiaInjetadaFp),
-      valor_faturado: parseNum(valorFaturado),
       valor_total: parseNum(valorTotal),
       consumo_kwh: parseNum(consumoKwh),
       energia_injetada_kwh: parseNum(energiaInjetadaKwh),
       creditos_energia_kwh: parseNum(creditosEnergiaKwh),
-      economia_estimada: parseNum(economiaEstimada),
       demanda_contratada_kw: parseNum(demandaContratadaKw),
       valor_tusd: parseNum(valorTusd),
       valor_te: parseNum(valorTe),
@@ -238,10 +226,6 @@ export function FaturaDetail({ fatura }: Props) {
                   <Input type="number" step="0.000001" value={valorTarifaFp} onChange={(e) => setValorTarifaFp(e.target.value)} />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">{FIELD_LABELS.kwh_compensado_fp}</Label>
-                  <Input type="number" step="0.01" value={kwhCompensadoFp} onChange={(e) => setKwhCompensadoFp(e.target.value)} />
-                </div>
-                <div className="space-y-1">
                   <Label className="text-xs">{FIELD_LABELS.tarifa_compensada_fp}</Label>
                   <Input type="number" step="0.000001" value={tarifaCompensadaFp} onChange={(e) => setTarifaCompensadaFp(e.target.value)} />
                 </div>
@@ -258,7 +242,6 @@ export function FaturaDetail({ fatura }: Props) {
               <>
                 <ReadonlyField label={FIELD_LABELS.energia_faturada_fp} value={formatDisplayValue("energia_faturada_fp", fatura.energia_faturada_fp)} />
                 <ReadonlyField label={FIELD_LABELS.valor_tarifa_fp} value={formatDisplayValue("valor_tarifa_fp", fatura.valor_tarifa_fp)} />
-                <ReadonlyField label={FIELD_LABELS.kwh_compensado_fp} value={formatDisplayValue("kwh_compensado_fp", fatura.kwh_compensado_fp)} />
                 <ReadonlyField label={FIELD_LABELS.tarifa_compensada_fp} value={formatDisplayValue("tarifa_compensada_fp", fatura.tarifa_compensada_fp)} />
                 <ReadonlyField label={FIELD_LABELS.energia_consumida_fp} value={formatDisplayValue("energia_consumida_fp", fatura.energia_consumida_fp)} />
                 <ReadonlyField label={FIELD_LABELS.energia_injetada_fp} value={formatDisplayValue("energia_injetada_fp", fatura.energia_injetada_fp)} />
@@ -276,10 +259,6 @@ export function FaturaDetail({ fatura }: Props) {
             {editing ? (
               <>
                 <div className="space-y-1">
-                  <Label className="text-xs">{FIELD_LABELS.valor_faturado}</Label>
-                  <Input type="number" step="0.01" value={valorFaturado} onChange={(e) => setValorFaturado(e.target.value)} />
-                </div>
-                <div className="space-y-1">
                   <Label className="text-xs">{FIELD_LABELS.valor_total}</Label>
                   <Input type="number" step="0.01" value={valorTotal} onChange={(e) => setValorTotal(e.target.value)} />
                 </div>
@@ -295,19 +274,13 @@ export function FaturaDetail({ fatura }: Props) {
                   <Label className="text-xs">{FIELD_LABELS.creditos_energia_kwh}</Label>
                   <Input type="number" step="0.01" value={creditosEnergiaKwh} onChange={(e) => setCreditosEnergiaKwh(e.target.value)} />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">{FIELD_LABELS.economia_estimada}</Label>
-                  <Input type="number" step="0.01" value={economiaEstimada} onChange={(e) => setEconomiaEstimada(e.target.value)} />
-                </div>
               </>
             ) : (
               <>
-                <ReadonlyField label={FIELD_LABELS.valor_faturado} value={formatDisplayValue("valor_faturado", fatura.valor_faturado)} />
                 <ReadonlyField label={FIELD_LABELS.valor_total} value={formatDisplayValue("valor_total", fatura.valor_total)} />
                 <ReadonlyField label={FIELD_LABELS.consumo_kwh} value={formatDisplayValue("consumo_kwh", fatura.consumo_kwh)} />
                 <ReadonlyField label={FIELD_LABELS.energia_injetada_kwh} value={formatDisplayValue("energia_injetada_kwh", fatura.energia_injetada_kwh)} />
                 <ReadonlyField label={FIELD_LABELS.creditos_energia_kwh} value={formatDisplayValue("creditos_energia_kwh", fatura.creditos_energia_kwh)} />
-                <ReadonlyField label={FIELD_LABELS.economia_estimada} value={formatDisplayValue("economia_estimada", fatura.economia_estimada)} />
               </>
             )}
           </CardContent>

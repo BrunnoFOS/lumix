@@ -177,14 +177,21 @@ export async function updateRelatorioAnexo(
   return {};
 }
 
-export async function getRelatorios(search?: string, statusEnvio?: string, empresaId?: string) {
+export async function getRelatorios(search?: string, statusEnvio?: string, empresaId?: string, mostrarArquivados?: string) {
   const supabase = await createServerClient();
 
   let query = supabase
     .from("relatorios")
     .select("id, uc_id, empresa_id, mes_referencia, titulo, geracao_kwh, geracao_estimada_kwh, economia_reais, indice_performance, status_envio, gerado_por, tipo_relatorio, pdf_url, arquivado, created_at, uc:unidades_consumidoras(id, codigo_uc), empresa:empresas(id, nome)")
-    .eq("arquivado", false)
     .order("mes_referencia", { ascending: false });
+
+  // Filtro de arquivado
+  if (mostrarArquivados === "apenas-arquivados") {
+    query = query.eq("arquivado", true);
+  } else if (mostrarArquivados !== "todos") {
+    // Default: apenas não arquivados
+    query = query.eq("arquivado", false);
+  }
 
   if (statusEnvio && statusEnvio !== "todos") {
     query = query.eq("status_envio", statusEnvio);

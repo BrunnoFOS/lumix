@@ -12,7 +12,7 @@ import { getEmpresas } from "@/lib/actions/empresas";
 export const dynamic = "force-dynamic";
 
 interface Props {
-  searchParams: Promise<{ search?: string; status?: string }>;
+  searchParams: Promise<{ search?: string; status?: string; arquivado?: string }>;
 }
 
 async function GeracaoMensalSection() {
@@ -27,11 +27,11 @@ async function GeracaoMensalSection() {
   return <SolisGeracaoMensal empresas={empresasOptions} ucs={ucsComStations} />;
 }
 
-async function RelatorioListSection({ search, status }: { search?: string; status?: string }) {
+async function RelatorioListSection({ search, status, arquivado }: { search?: string; status?: string; arquivado?: string }) {
   const supabase = await createServerClient();
 
   const [relatorios, { data: fpsData }] = await Promise.all([
-    getRelatorios(search, status),
+    getRelatorios(search, status, undefined, arquivado),
     supabase
       .from("faturas_processadas")
       .select("id, uc_id, mes_referencia, pdf_fatura_url")
@@ -122,7 +122,7 @@ export default async function RelatoriosPage({ searchParams }: Props) {
 
       {/* Relatórios list — streamed independently */}
       <Suspense fallback={<RelatorioListFallback />}>
-        <RelatorioListSection search={params.search} status={params.status} />
+        <RelatorioListSection search={params.search} status={params.status} arquivado={params.arquivado} />
       </Suspense>
     </div>
   );

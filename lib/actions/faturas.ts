@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
+import { criarNotificacao } from "@/lib/actions/notificacoes";
 
 const WEBHOOK_FATURA_URL =
   process.env.N8N_WEBHOOK_FATURA_URL ??
@@ -103,7 +104,7 @@ export async function createFatura(formData: FormData): Promise<ActionResult> {
 
   if (error) {
     if (error.code === "23505") {
-      return { error: "Já existe fatura para esta UC neste mês de referência." };
+      return { error: "Já existe fatura para esta UC neste mês de referência. Para substituí-la, exclua a fatura existente primeiro." };
     }
     return { error: "Erro ao criar fatura." };
   }
@@ -140,16 +141,13 @@ const FATURA_EDITABLE_FIELDS = [
   "fim_ciclo",
   "energia_faturada_fp",
   "valor_tarifa_fp",
-  "kwh_compensado_fp",
   "tarifa_compensada_fp",
   "energia_consumida_fp",
   "energia_injetada_fp",
-  "valor_faturado",
   "valor_total",
   "consumo_kwh",
   "energia_injetada_kwh",
   "creditos_energia_kwh",
-  "economia_estimada",
   "demanda_contratada_kw",
   "valor_tusd",
   "valor_te",
@@ -234,6 +232,22 @@ export async function updateFatura(
   }
 
   revalidatePath(`/admin/faturas/${id}`);
+  revalidatePath("/admin/faturas");
+  return { data: { id } };
+}
+
+export async function deleteFatura(id: string): Promise<ActionResult> {
+  const supabase = await createServerClient();
+
+  const { error } = await supabase
+    .from("faturas")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    return { error: "Erro ao excluir fatura." };
+  }
+
   revalidatePath("/admin/faturas");
   return { data: { id } };
 }
@@ -401,6 +415,20 @@ export async function createFaturaCliente(formData: FormData): Promise<ActionRes
 
   const arquivoUrl = imagem_url || pdf_url || null;
 
+  // Buscar código da UC para a notificação
+  const { data: ucData } = await supabase
+    .from("unidades_consumidoras")
+    .select("codigo_uc")
+    .eq("id", uc_id)
+    .single();
+
+  // Criar notificação para admins
+  await criarNotificacao(
+    "fatura_cliente",
+    `Nova fatura enviada pelo cliente - UC ${ucData?.codigo_uc ?? uc_id}`,
+    data.id
+  );
+
   const webhookPayload = {
     fatura_id: data.id,
     uc_id,
@@ -449,7 +477,7 @@ export async function createFaturaComGeracao(formData: FormData): Promise<Action
 
   if (error) {
     if (error.code === "23505") {
-      return { error: "Já existe fatura para esta UC neste mês de referência." };
+      return { error: "Já existe fatura para esta UC neste mês de referência. Para substituí-la, exclua a fatura existente primeiro." };
     }
     return { error: "Erro ao criar fatura." };
   }

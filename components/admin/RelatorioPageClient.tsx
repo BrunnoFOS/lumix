@@ -16,6 +16,7 @@ interface RelatorioRow {
   tipo_relatorio: string;
   pdf_url: string | null;
   created_at: string;
+  arquivado: boolean;
   uc: { id: string; codigo_uc: string } | null;
   empresa: { id: string; nome: string } | null;
 }

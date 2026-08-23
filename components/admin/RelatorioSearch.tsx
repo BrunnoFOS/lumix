@@ -58,6 +58,21 @@ export function RelatorioSearch() {
           <SelectItem value="erro">Erro</SelectItem>
         </SelectContent>
       </Select>
+      <Select
+        defaultValue={searchParams.get("arquivado") ?? "nao-arquivados"}
+        onValueChange={(value) =>
+          updateParam("arquivado", value === "nao-arquivados" ? "" : value ?? "")
+        }
+      >
+        <SelectTrigger className="w-44">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="nao-arquivados">Não arquivados</SelectItem>
+          <SelectItem value="apenas-arquivados">Apenas arquivados</SelectItem>
+          <SelectItem value="todos">Todos</SelectItem>
+        </SelectContent>
+      </Select>
     </div>
   );
 }

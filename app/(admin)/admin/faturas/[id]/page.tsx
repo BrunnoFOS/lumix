@@ -8,6 +8,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { formatMesReferencia } from "@/lib/utils";
 import { FaturaDetail } from "@/components/admin/FaturaDetail";
 import { FaturaEditLog } from "@/components/admin/FaturaEditLog";
+import { FaturaDeleteButton } from "@/components/admin/FaturaDeleteButton";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -52,29 +53,36 @@ export default async function FaturaDetalhePage({ params }: Props) {
       </div>
 
       {/* Actions */}
-      <div className="flex flex-wrap gap-3">
-        {fatura.pdf_url && (
-          <a href={fatura.pdf_url} target="_blank" rel="noopener noreferrer">
-            <LinkButton href={fatura.pdf_url} variant="outline">
-              <Download className="mr-2 h-4 w-4" />
-              Baixar PDF
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-3">
+          {fatura.pdf_url && (
+            <a href={fatura.pdf_url} target="_blank" rel="noopener noreferrer">
+              <LinkButton href={fatura.pdf_url} variant="outline">
+                <Download className="mr-2 h-4 w-4" />
+                Baixar PDF
+              </LinkButton>
+            </a>
+          )}
+          {fatura.imagem_url && (
+            <a href={fatura.imagem_url} target="_blank" rel="noopener noreferrer">
+              <LinkButton href={fatura.imagem_url} variant="outline">
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Ver imagem
+              </LinkButton>
+            </a>
+          )}
+          {faturaProcessada && (
+            <LinkButton href={`/admin/faturas-processadas/${faturaProcessada.id}`} variant="outline">
+              <FileSearch className="mr-2 h-4 w-4" />
+              Ver dados extraídos
             </LinkButton>
-          </a>
-        )}
-        {fatura.imagem_url && (
-          <a href={fatura.imagem_url} target="_blank" rel="noopener noreferrer">
-            <LinkButton href={fatura.imagem_url} variant="outline">
-              <ExternalLink className="mr-2 h-4 w-4" />
-              Ver imagem
-            </LinkButton>
-          </a>
-        )}
-        {faturaProcessada && (
-          <LinkButton href={`/admin/faturas-processadas/${faturaProcessada.id}`} variant="outline">
-            <FileSearch className="mr-2 h-4 w-4" />
-            Ver dados extraídos
-          </LinkButton>
-        )}
+          )}
+        </div>
+        <FaturaDeleteButton
+          faturaId={fatura.id}
+          ucCodigo={uc?.codigo_uc ?? ""}
+          mesReferencia={formatMesReferencia(fatura.mes_referencia)}
+        />
       </div>
 
       <FaturaDetail fatura={fatura} />

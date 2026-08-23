@@ -1,6 +1,7 @@
 "use server";
 
 import { createServerClient } from "@/lib/supabase/server";
+import { calcularGeracaoEstimadaUC } from "@/lib/actions/geracao-estimada";
 
 /**
  * Busca IDs de UCs ativas de uma lista de empresas.
@@ -131,12 +132,29 @@ export async function getResumoGeracaoCliente(empresaIds: string | string[], mes
   ]);
 
   const geracao_total = geracoes?.reduce((sum, g) => sum + (g.geracao_kwh || 0), 0) ?? 0;
-  const estimada_total = geracoes?.reduce((sum, g) => sum + (g.geracao_estimada_kwh || 0), 0) ?? 0;
   const economia_total = faturas?.reduce((sum, f) => sum + (f.economia_estimada || 0), 0) ?? 0;
 
-  // Performance media
-  const ratios = geracoes?.filter((g) => g.performance_ratio !== null).map((g) => g.performance_ratio!) ?? [];
-  const avgRatio = ratios.length > 0 ? ratios.reduce((a, b) => a + b, 0) / ratios.length : null;
+  // Recalcular geração estimada e PR com base nos parâmetros atuais da UC
+  const estimativasPromises = resolvedUcIds.map(async (ucId) => {
+    const geracao = geracoes?.find((g) => g.uc_id === ucId);
+    if (!geracao?.geracao_kwh) return null;
+
+    const estimativa = await calcularGeracaoEstimadaUC(ucId, mes, geracao.geracao_kwh);
+    if ("error" in estimativa) return null;
+
+    return {
+      uc_id: ucId,
+      ...estimativa.data,
+    };
+  });
+
+  const estimativas = (await Promise.all(estimativasPromises)).filter((e): e is NonNullable<typeof e> => e !== null);
+
+  const estimada_total = estimativas.reduce((sum, e) => sum + e.geracao_estimada_kwh, 0);
+
+  // Performance média recalculada
+  const prs = estimativas.filter((e) => e.pr_percent !== undefined).map((e) => e.pr_percent!);
+  const avgRatio = prs.length > 0 ? prs.reduce((a, b) => a + b, 0) / prs.length : null;
 
   let performance: string | null = null;
   if (avgRatio !== null) {
@@ -149,6 +167,10 @@ export async function getResumoGeracaoCliente(empresaIds: string | string[], mes
     geracoes?.map((g) => [g.uc_id, g]) ?? []
   );
 
+  const estimativaMap = new Map(
+    estimativas.map((e) => [e.uc_id, e])
+  );
+
   return {
     geracao_total,
     estimada_total,
@@ -157,12 +179,13 @@ export async function getResumoGeracaoCliente(empresaIds: string | string[], mes
     performance_ratio: avgRatio,
     ucs: ucs.map((uc) => {
       const g = geracaoMap.get(uc.id);
+      const est = estimativaMap.get(uc.id);
       return {
         id: uc.id,
         codigo_uc: uc.codigo_uc,
         geracao_kwh: g?.geracao_kwh ?? 0,
-        geracao_estimada_kwh: g?.geracao_estimada_kwh ?? uc.geracao_estimada_mensal_kwh ?? 0,
-        indice_performance: g?.indice_performance ?? null,
+        geracao_estimada_kwh: est?.geracao_estimada_kwh ?? g?.geracao_estimada_kwh ?? uc.geracao_estimada_mensal_kwh ?? 0,
+        indice_performance: est?.indice_performance ?? g?.indice_performance ?? null,
       };
     }),
   };

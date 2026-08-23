@@ -1,5 +1,5 @@
 import { AdminSidebar } from "@/components/shared/sidebar";
-import { NotificationBell } from "@/components/shared/NotificationBell";
+import { NotificationBell } from "@/components/admin/NotificationBell";
 
 export default function AdminLayout({
   children,
