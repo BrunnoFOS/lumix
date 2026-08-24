@@ -19,37 +19,45 @@ async function calcularEconomiaUC(
   // Buscar dados da UC
   const { data: uc } = await supabase
     .from("unidades_consumidoras")
-    .select("distribuidora, subgrupo, modalidade_tarifaria, grupo_tarifario, contrato_acl_rs_mwh")
+    .select("codigo_uc, concessionaria_sigla, subgrupo, modalidade_tarifaria_aneel, grupo_tarifario, contrato_acl_rs_mwh")
     .eq("id", ucId)
     .single();
 
-  if (!uc || !uc.distribuidora || !uc.subgrupo) {
-    // UC sem dados suficientes para calcular economia
+  if (!uc || !uc.concessionaria_sigla || !uc.subgrupo) {
+    console.log(`[calcularEconomiaUC] UC sem concessionaria_sigla ou subgrupo:`, uc?.codigo_uc);
     return { economia_rs: 0 };
   }
 
+  console.log(`[calcularEconomiaUC] UC ${uc.codigo_uc}: concessionaria=${uc.concessionaria_sigla}, subgrupo=${uc.subgrupo}, grupo=${uc.grupo_tarifario}, geração=${geracaoKwh}kWh`);
+
   // Buscar tarifas
   const tarifas = await lookupTarifasUC(
-    uc.distribuidora,
+    uc.concessionaria_sigla,
     uc.subgrupo,
-    uc.modalidade_tarifaria ?? null,
+    uc.modalidade_tarifaria_aneel ?? null,
     uc.grupo_tarifario ?? "grupo_b",
     mesReferencia
   );
 
   if (!tarifas) {
-    // Sem tarifas disponíveis
+    console.log(`[calcularEconomiaUC] UC ${uc.codigo_uc}: SEM TARIFAS para ${uc.concessionaria_sigla}/${uc.subgrupo}/${mesReferencia}`);
     return { economia_rs: 0 };
   }
+
+  console.log(`[calcularEconomiaUC] UC ${uc.codigo_uc}: tarifas encontradas`, tarifas);
 
   // Buscar impostos para calcular fator
   const { data: impostos } = await supabase
     .from("impostos_concessionaria")
     .select("icms_aliquota, pis_aliquota, cofins_aliquota")
-    .eq("concessionaria_sigla", uc.distribuidora)
+    .eq("concessionaria_sigla", uc.concessionaria_sigla)
     .lte("vigencia_inicio", mesReferencia)
     .or(`vigencia_fim.gte.${mesReferencia},vigencia_fim.is.null`)
     .maybeSingle();
+
+  if (!impostos) {
+    console.log(`[calcularEconomiaUC] UC ${uc.codigo_uc}: SEM IMPOSTOS para ${uc.concessionaria_sigla}`);
+  }
 
   const fator = impostos
     ? calcularFatorImposto(
@@ -59,6 +67,8 @@ async function calcularEconomiaUC(
       )
     : 1;
 
+  console.log(`[calcularEconomiaUC] UC ${uc.codigo_uc}: fator imposto = ${fator}`);
+
   let economia = 0;
 
   if (tarifas.grupo === "grupo_b" && tarifas.tusd != null && tarifas.te != null) {
@@ -67,20 +77,26 @@ async function calcularEconomiaUC(
     const teImp = tarifas.te * fator;
     const tarifa = tusdImp + teImp;
     economia = geracaoKwh * tarifa;
+    console.log(`[calcularEconomiaUC] UC ${uc.codigo_uc}: Grupo B - TUSD=${tarifas.tusd}, TE=${tarifas.te}, tarifa_total=${tarifa}, economia=${economia}`);
   } else if (tarifas.grupo === "acl" && tarifas.tusd_fora_ponta != null && uc.contrato_acl_rs_mwh) {
     // ACL: TUSD_fp × fator imposto + contrato ACL
     const tusdFpImp = tarifas.tusd_fora_ponta * fator;
     const contratoKwh = Number(uc.contrato_acl_rs_mwh) / 1000;
     const tarifa = tusdFpImp + contratoKwh;
     economia = geracaoKwh * tarifa;
+    console.log(`[calcularEconomiaUC] UC ${uc.codigo_uc}: ACL - TUSD_FP=${tarifas.tusd_fora_ponta}, contrato=${contratoKwh}, tarifa_total=${tarifa}, economia=${economia}`);
   } else if (tarifas.tusd_fora_ponta != null && tarifas.te_fora_ponta != null) {
     // Grupo A: fora ponta × fator imposto
     const tusdFpImp = tarifas.tusd_fora_ponta * fator;
     const teFpImp = tarifas.te_fora_ponta * fator;
     const tarifa = tusdFpImp + teFpImp;
     economia = geracaoKwh * tarifa;
+    console.log(`[calcularEconomiaUC] UC ${uc.codigo_uc}: Grupo A - TUSD_FP=${tarifas.tusd_fora_ponta}, TE_FP=${tarifas.te_fora_ponta}, tarifa_total=${tarifa}, economia=${economia}`);
+  } else {
+    console.log(`[calcularEconomiaUC] UC ${uc.codigo_uc}: NENHUMA CONDIÇÃO ATENDIDA - tarifas.grupo=${tarifas.grupo}`);
   }
 
+  console.log(`[calcularEconomiaUC] UC ${uc.codigo_uc}: RESULTADO FINAL = R$ ${Math.round(economia * 100) / 100}`);
   return { economia_rs: Math.round(economia * 100) / 100 };
 }
 
@@ -288,16 +304,31 @@ export async function getEconomiaCliente(empresaIds: string | string[], ucIds?: 
   dataLimite.setMonth(dataLimite.getMonth() - mesesLimit);
   const limiteStr = `${dataLimite.getFullYear()}-${String(dataLimite.getMonth() + 1).padStart(2, "0")}-01`;
 
-  const { data, error } = await supabase
-    .from("faturas")
-    .select("uc_id, mes_referencia, economia_estimada")
+  // Buscar dados de geração dos últimos meses
+  const { data: geracoes, error } = await supabase
+    .from("dados_geracao")
+    .select("uc_id, mes_referencia, geracao_kwh")
     .in("uc_id", resolvedUcIds)
-    .not("economia_estimada", "is", null)
     .gte("mes_referencia", limiteStr)
     .order("mes_referencia", { ascending: false });
 
-  if (error) return [];
-  return data;
+  if (error || !geracoes) return [];
+
+  // Calcular economia em tempo real para cada UC/mês
+  const economiaPromises = geracoes.map(async (g) => {
+    if (!g.geracao_kwh) return null;
+
+    const economia = await calcularEconomiaUC(g.uc_id, g.mes_referencia, g.geracao_kwh);
+
+    return {
+      uc_id: g.uc_id,
+      mes_referencia: g.mes_referencia,
+      economia_estimada: economia.economia_rs,
+    };
+  });
+
+  const resultados = await Promise.all(economiaPromises);
+  return resultados.filter((r): r is NonNullable<typeof r> => r !== null && r.economia_estimada > 0);
 }
 
 export async function getUCsCliente(empresaIds: string | string[]) {

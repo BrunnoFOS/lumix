@@ -10,9 +10,14 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Lumix — Monitoramento de Usinas Fotovoltaicas",
+  title: "Monitoramento - Lumix",
   description:
     "Sistema de monitoramento de geração de energia solar, relatórios e performance.",
+  icons: {
+    icon: "/logo-lumix.png",
+    shortcut: "/logo-lumix.png",
+    apple: "/logo-lumix.png",
+  },
 };
 
 export default function RootLayout({
