@@ -9,12 +9,51 @@ const WEBHOOK_FATURA_URL =
   process.env.N8N_WEBHOOK_FATURA_URL ??
   "https://n8n-n8n.nt4zcb.easypanel.host/webhook/1f12ba76-a38d-4a8f-9441-db04f017c72f";
 
+/**
+ * Detecta e corrige duplicação de energia injetada.
+ * Quando energia_injetada_fp === energia_injetada_kwh, significa que a fatura
+ * mostrou a mesma energia em duas linhas (TUSD e TE), mas é a MESMA energia.
+ * Neste caso, mantemos apenas energia_injetada_kwh e zeramos energia_injetada_fp.
+ */
+function corrigirDuplicacaoEnergiaInjetada(data: {
+  energia_injetada_fp?: number | null;
+  energia_injetada_kwh?: number | null;
+}): {
+  energia_injetada_fp: number | null;
+  energia_injetada_kwh: number | null;
+} {
+  const fp = data.energia_injetada_fp ?? null;
+  const kwh = data.energia_injetada_kwh ?? null;
+
+  // Se ambos são nulos ou zero, manter assim
+  if ((!fp || fp === 0) && (!kwh || kwh === 0)) {
+    return { energia_injetada_fp: null, energia_injetada_kwh: null };
+  }
+
+  // Se apenas um está preenchido, manter assim
+  if (!fp || fp === 0) {
+    return { energia_injetada_fp: null, energia_injetada_kwh: kwh };
+  }
+  if (!kwh || kwh === 0) {
+    return { energia_injetada_fp: fp, energia_injetada_kwh: null };
+  }
+
+  // Se os valores são IGUAIS (duplicação), manter apenas no campo total (kwh)
+  if (Math.abs(fp - kwh) < 0.01) { // Tolerância de 0.01 kWh para floating point
+    return { energia_injetada_fp: null, energia_injetada_kwh: kwh };
+  }
+
+  // Se são valores diferentes, mantém ambos (injeção em ponta + fora ponta)
+  return { energia_injetada_fp: fp, energia_injetada_kwh: kwh };
+}
+
 /** Agenda callback para rodar após a resposta. Fallback fire-and-forget em ambientes sem request scope (ex: testes). */
 function afterResponse(callback: () => Promise<void>) {
   try {
     after(callback);
   } catch {
-    callback().catch(console.error);
+    // Fire-and-forget fallback - silencia erros
+    callback().catch(() => {});
   }
 }
 
@@ -71,6 +110,12 @@ export async function createFatura(formData: FormData): Promise<ActionResult> {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Corrigir duplicação de energia injetada (TUSD + TE mostrando mesmo valor)
+  const energiaInjetadaCorrigida = corrigirDuplicacaoEnergiaInjetada({
+    energia_injetada_fp: parseDecimal(formData.get("energia_injetada_fp") as string),
+    energia_injetada_kwh: parseDecimal(formData.get("energia_injetada_kwh") as string),
+  });
+
   const { data, error } = await supabase
     .from("faturas")
     .insert({
@@ -86,10 +131,10 @@ export async function createFatura(formData: FormData): Promise<ActionResult> {
       kwh_compensado_fp: parseDecimal(formData.get("kwh_compensado_fp") as string),
       tarifa_compensada_fp: parseDecimal(formData.get("tarifa_compensada_fp") as string),
       energia_consumida_fp: parseDecimal(formData.get("energia_consumida_fp") as string),
-      energia_injetada_fp: parseDecimal(formData.get("energia_injetada_fp") as string),
+      energia_injetada_fp: energiaInjetadaCorrigida.energia_injetada_fp,
       valor_total: parseDecimal(formData.get("valor_total") as string),
       consumo_kwh: parseDecimal(formData.get("consumo_kwh") as string),
-      energia_injetada_kwh: parseDecimal(formData.get("energia_injetada_kwh") as string),
+      energia_injetada_kwh: energiaInjetadaCorrigida.energia_injetada_kwh,
       creditos_energia_kwh: parseDecimal(formData.get("creditos_energia_kwh") as string),
       demanda_contratada_kw: parseDecimal(formData.get("demanda_contratada_kw") as string),
       valor_tusd: parseDecimal(formData.get("valor_tusd") as string),
@@ -184,7 +229,7 @@ export async function updateFatura(
     alterado_por: string;
   }[] = [];
 
-  const updatePayload: Record<string, unknown> = {};
+  let updatePayload: Record<string, unknown> = {};
 
   for (const field of FATURA_EDITABLE_FIELDS) {
     if (!(field in updates)) continue;
@@ -205,6 +250,18 @@ export async function updateFatura(
       });
       updatePayload[field] = newValue;
     }
+  }
+
+  // Corrigir duplicação de energia injetada se ambos os campos foram atualizados
+  if ("energia_injetada_fp" in updatePayload || "energia_injetada_kwh" in updatePayload) {
+    const currentRecord = current as unknown as Record<string, unknown>;
+    const energiaInjetadaCorrigida = corrigirDuplicacaoEnergiaInjetada({
+      energia_injetada_fp: (updatePayload.energia_injetada_fp ?? currentRecord.energia_injetada_fp) as number | null,
+      energia_injetada_kwh: (updatePayload.energia_injetada_kwh ?? currentRecord.energia_injetada_kwh) as number | null,
+    });
+
+    updatePayload.energia_injetada_fp = energiaInjetadaCorrigida.energia_injetada_fp;
+    updatePayload.energia_injetada_kwh = energiaInjetadaCorrigida.energia_injetada_kwh;
   }
 
   if (Object.keys(updatePayload).length === 0) {
@@ -239,6 +296,17 @@ export async function updateFatura(
 export async function deleteFatura(id: string): Promise<ActionResult> {
   const supabase = await createServerClient();
 
+  // Primeiro, desvincular relatórios que referenciam esta fatura
+  const { error: unlinkError } = await supabase
+    .from("relatorios")
+    .update({ fatura_id: null })
+    .eq("fatura_id", id);
+
+  if (unlinkError) {
+    return { error: "Erro ao desvincular relatórios da fatura." };
+  }
+
+  // Depois, deletar a fatura
   const { error } = await supabase
     .from("faturas")
     .delete()
@@ -249,6 +317,7 @@ export async function deleteFatura(id: string): Promise<ActionResult> {
   }
 
   revalidatePath("/admin/faturas");
+  revalidatePath("/admin/relatorios");
   return { data: { id } };
 }
 

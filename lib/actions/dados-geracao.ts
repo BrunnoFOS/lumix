@@ -2,6 +2,87 @@
 
 import { createServerClient } from "@/lib/supabase/server";
 import { calcularGeracaoEstimadaUC } from "@/lib/actions/geracao-estimada";
+import { lookupTarifasUC } from "@/lib/actions/tarifas-aneel";
+import { calcularFatorImposto } from "@/lib/geracao-estimada";
+
+/**
+ * Calcula a economia estimada para uma UC em um mês específico.
+ * Recalcula em tempo real com base nas tarifas atuais e geração real.
+ */
+async function calcularEconomiaUC(
+  ucId: string,
+  mesReferencia: string,
+  geracaoKwh: number
+): Promise<{ economia_rs: number }> {
+  const supabase = await createServerClient();
+
+  // Buscar dados da UC
+  const { data: uc } = await supabase
+    .from("unidades_consumidoras")
+    .select("distribuidora, subgrupo, modalidade_tarifaria, grupo_tarifario, contrato_acl_rs_mwh")
+    .eq("id", ucId)
+    .single();
+
+  if (!uc || !uc.distribuidora || !uc.subgrupo) {
+    // UC sem dados suficientes para calcular economia
+    return { economia_rs: 0 };
+  }
+
+  // Buscar tarifas
+  const tarifas = await lookupTarifasUC(
+    uc.distribuidora,
+    uc.subgrupo,
+    uc.modalidade_tarifaria ?? null,
+    uc.grupo_tarifario ?? "grupo_b",
+    mesReferencia
+  );
+
+  if (!tarifas) {
+    // Sem tarifas disponíveis
+    return { economia_rs: 0 };
+  }
+
+  // Buscar impostos para calcular fator
+  const { data: impostos } = await supabase
+    .from("impostos_concessionaria")
+    .select("icms_aliquota, pis_aliquota, cofins_aliquota")
+    .eq("concessionaria_sigla", uc.distribuidora)
+    .lte("vigencia_inicio", mesReferencia)
+    .or(`vigencia_fim.gte.${mesReferencia},vigencia_fim.is.null`)
+    .maybeSingle();
+
+  const fator = impostos
+    ? calcularFatorImposto(
+        Number(impostos.icms_aliquota),
+        Number(impostos.pis_aliquota),
+        Number(impostos.cofins_aliquota)
+      )
+    : 1;
+
+  let economia = 0;
+
+  if (tarifas.grupo === "grupo_b" && tarifas.tusd != null && tarifas.te != null) {
+    // Grupo B: tarifa única (TUSD + TE) × fator imposto
+    const tusdImp = tarifas.tusd * fator;
+    const teImp = tarifas.te * fator;
+    const tarifa = tusdImp + teImp;
+    economia = geracaoKwh * tarifa;
+  } else if (tarifas.grupo === "acl" && tarifas.tusd_fora_ponta != null && uc.contrato_acl_rs_mwh) {
+    // ACL: TUSD_fp × fator imposto + contrato ACL
+    const tusdFpImp = tarifas.tusd_fora_ponta * fator;
+    const contratoKwh = Number(uc.contrato_acl_rs_mwh) / 1000;
+    const tarifa = tusdFpImp + contratoKwh;
+    economia = geracaoKwh * tarifa;
+  } else if (tarifas.tusd_fora_ponta != null && tarifas.te_fora_ponta != null) {
+    // Grupo A: fora ponta × fator imposto
+    const tusdFpImp = tarifas.tusd_fora_ponta * fator;
+    const teFpImp = tarifas.te_fora_ponta * fator;
+    const tarifa = tusdFpImp + teFpImp;
+    economia = geracaoKwh * tarifa;
+  }
+
+  return { economia_rs: Math.round(economia * 100) / 100 };
+}
 
 /**
  * Busca IDs de UCs ativas de uma lista de empresas.
@@ -132,28 +213,33 @@ export async function getResumoGeracaoCliente(empresaIds: string | string[], mes
   ]);
 
   const geracao_total = geracoes?.reduce((sum, g) => sum + (g.geracao_kwh || 0), 0) ?? 0;
-  const economia_total = faturas?.reduce((sum, f) => sum + (f.economia_estimada || 0), 0) ?? 0;
 
-  // Recalcular geração estimada e PR com base nos parâmetros atuais da UC
-  const estimativasPromises = resolvedUcIds.map(async (ucId) => {
+  // Recalcular geração estimada, PR e economia com base nos parâmetros atuais da UC
+  const calculosPromises = resolvedUcIds.map(async (ucId) => {
     const geracao = geracoes?.find((g) => g.uc_id === ucId);
     if (!geracao?.geracao_kwh) return null;
 
-    const estimativa = await calcularGeracaoEstimadaUC(ucId, mes, geracao.geracao_kwh);
+    const [estimativa, economia] = await Promise.all([
+      calcularGeracaoEstimadaUC(ucId, mes, geracao.geracao_kwh),
+      calcularEconomiaUC(ucId, mes, geracao.geracao_kwh),
+    ]);
+
     if ("error" in estimativa) return null;
 
     return {
       uc_id: ucId,
       ...estimativa.data,
+      economia_rs: economia.economia_rs,
     };
   });
 
-  const estimativas = (await Promise.all(estimativasPromises)).filter((e): e is NonNullable<typeof e> => e !== null);
+  const calculos = (await Promise.all(calculosPromises)).filter((e): e is NonNullable<typeof e> => e !== null);
 
-  const estimada_total = estimativas.reduce((sum, e) => sum + e.geracao_estimada_kwh, 0);
+  const estimada_total = calculos.reduce((sum, e) => sum + e.geracao_estimada_kwh, 0);
+  const economia_total = calculos.reduce((sum, e) => sum + e.economia_rs, 0);
 
   // Performance média recalculada
-  const prs = estimativas.filter((e) => e.pr_percent !== undefined).map((e) => e.pr_percent!);
+  const prs = calculos.filter((e) => e.pr_percent !== undefined).map((e) => e.pr_percent!);
   const avgRatio = prs.length > 0 ? prs.reduce((a, b) => a + b, 0) / prs.length : null;
 
   let performance: string | null = null;
@@ -167,8 +253,8 @@ export async function getResumoGeracaoCliente(empresaIds: string | string[], mes
     geracoes?.map((g) => [g.uc_id, g]) ?? []
   );
 
-  const estimativaMap = new Map(
-    estimativas.map((e) => [e.uc_id, e])
+  const calculosMap = new Map(
+    calculos.map((e) => [e.uc_id, e])
   );
 
   return {
@@ -179,13 +265,13 @@ export async function getResumoGeracaoCliente(empresaIds: string | string[], mes
     performance_ratio: avgRatio,
     ucs: ucs.map((uc) => {
       const g = geracaoMap.get(uc.id);
-      const est = estimativaMap.get(uc.id);
+      const calc = calculosMap.get(uc.id);
       return {
         id: uc.id,
         codigo_uc: uc.codigo_uc,
         geracao_kwh: g?.geracao_kwh ?? 0,
-        geracao_estimada_kwh: est?.geracao_estimada_kwh ?? g?.geracao_estimada_kwh ?? uc.geracao_estimada_mensal_kwh ?? 0,
-        indice_performance: est?.indice_performance ?? g?.indice_performance ?? null,
+        geracao_estimada_kwh: calc?.geracao_estimada_kwh ?? g?.geracao_estimada_kwh ?? uc.geracao_estimada_mensal_kwh ?? 0,
+        indice_performance: calc?.indice_performance ?? g?.indice_performance ?? null,
       };
     }),
   };

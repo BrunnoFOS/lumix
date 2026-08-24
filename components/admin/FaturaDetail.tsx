@@ -42,7 +42,11 @@ const FIELD_LABELS: Record<string, string> = {
 function formatDisplayValue(field: string, value: unknown): string {
   if (value == null) return "\u2014";
   if (field === "inicio_ciclo" || field === "fim_ciclo") return formatDate(String(value));
-  if (field.endsWith("_kwh") || field.endsWith("_kw")) return formatKWh(Number(value));
+  // Campos de energia em kWh: _kwh, _kw, e campos _fp de energia
+  if (field.endsWith("_kwh") || field.endsWith("_kw") ||
+      field === "energia_faturada_fp" || field === "energia_consumida_fp" || field === "energia_injetada_fp") {
+    return formatKWh(Number(value));
+  }
   if (field === "valor_faturado" || field === "valor_total" || field === "economia_estimada" || field === "valor_tusd" || field === "valor_te") return formatCurrency(Number(value));
   if (field === "valor_tarifa_fp" || field === "tarifa_compensada_fp") return `R$ ${Number(value).toFixed(6)}/kWh`;
   return String(value);
