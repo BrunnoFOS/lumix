@@ -72,7 +72,7 @@ export function RelatorioSearch() {
           if (value === "nao-arquivados") {
             updateParam("arquivado", "");
           } else {
-            updateParam("arquivado", value);
+            updateParam("arquivado", value ?? "");
           }
         }}
       >
