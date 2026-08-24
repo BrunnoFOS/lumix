@@ -25,6 +25,14 @@ export function RelatorioSearch() {
     router.push(`/admin/relatorios?${params.toString()}`);
   }
 
+  // Determina o valor atual do filtro de arquivados
+  const arquivadoValue = (() => {
+    const param = searchParams.get("arquivado");
+    if (param === "apenas-arquivados") return "apenas-arquivados";
+    if (param === "todos") return "todos";
+    return "nao-arquivados";
+  })();
+
   return (
     <div className="flex gap-3">
       <div className="relative flex-1">
@@ -59,17 +67,21 @@ export function RelatorioSearch() {
         </SelectContent>
       </Select>
       <Select
-        defaultValue={searchParams.get("arquivado") ?? "nao-arquivados"}
-        onValueChange={(value) =>
-          updateParam("arquivado", value === "nao-arquivados" ? "" : value ?? "")
-        }
+        value={arquivadoValue}
+        onValueChange={(value) => {
+          if (value === "nao-arquivados") {
+            updateParam("arquivado", "");
+          } else {
+            updateParam("arquivado", value);
+          }
+        }}
       >
         <SelectTrigger className="w-44">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="nao-arquivados">Não arquivados</SelectItem>
-          <SelectItem value="apenas-arquivados">Apenas arquivados</SelectItem>
+          <SelectItem value="apenas-arquivados">Arquivados</SelectItem>
           <SelectItem value="todos">Todos</SelectItem>
         </SelectContent>
       </Select>

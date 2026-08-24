@@ -355,3 +355,23 @@ export async function checkRelatorioGerado(ucId: string, mesReferencia: string):
 
   return !!data;
 }
+
+/**
+ * Exclui permanentemente um relatório
+ * Recomendado apenas para relatórios arquivados
+ */
+export async function deleteRelatorio(id: string): Promise<{ data?: { id: string }; error?: string }> {
+  const supabase = await createServerClient();
+
+  const { error } = await supabase
+    .from("relatorios")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    return { error: "Erro ao excluir relatório." };
+  }
+
+  revalidatePath("/admin/relatorios");
+  return { data: { id } };
+}

@@ -16,6 +16,7 @@ import {
   FileSearch,
   ChevronLeft,
   ChevronRight,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { exportToCSV } from "@/lib/export-csv";
@@ -36,6 +37,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -49,6 +60,7 @@ import {
   arquivarRelatorio,
   desarquivarRelatorio,
   updateRelatorioAnexo,
+  deleteRelatorio,
 } from "@/lib/actions/relatorios";
 import { createClient } from "@/lib/supabase/client";
 
@@ -113,6 +125,8 @@ export function RelatorioTable({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const PAGE_SIZE = 10;
 
   useEffect(() => {
@@ -146,6 +160,24 @@ export function RelatorioTable({
       return;
     }
     router.refresh();
+  }
+
+  function openDeleteDialog(id: string) {
+    setDeletingId(id);
+    setDeleteDialogOpen(true);
+  }
+
+  async function confirmExcluir() {
+    if (!deletingId) return;
+
+    const result = await deleteRelatorio(deletingId);
+    if (result.error) {
+      alert(result.error);
+    } else {
+      router.refresh();
+    }
+    setDeleteDialogOpen(false);
+    setDeletingId(null);
   }
 
   async function handleFileChange(
@@ -419,13 +451,23 @@ export function RelatorioTable({
                           </>
                         )}
                         {rel.arquivado && (
-                          <DropdownMenuItem
-                            onClick={() => handleDesarquivar(rel.id)}
-                            className="text-green-600 focus:text-green-600"
-                          >
-                            <Archive className="mr-2 h-4 w-4" />
-                            Desarquivar
-                          </DropdownMenuItem>
+                          <>
+                            <DropdownMenuItem
+                              onClick={() => handleDesarquivar(rel.id)}
+                              className="text-green-600 focus:text-green-600"
+                            >
+                              <Archive className="mr-2 h-4 w-4" />
+                              Desarquivar
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => openDeleteDialog(rel.id)}
+                              className="text-red-600 focus:text-red-600"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Excluir permanentemente
+                            </DropdownMenuItem>
+                          </>
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -538,6 +580,30 @@ export function RelatorioTable({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de confirmação de exclusão */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir relatório</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir permanentemente este relatório?
+              <br />
+              <br />
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmExcluir}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
