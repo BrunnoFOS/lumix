@@ -46,7 +46,7 @@ export function RelatorioDeleteButton({ relatorioId, titulo }: Props) {
 
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger asChild>
+      <AlertDialogTrigger>
         <Button variant="ghost" size="sm">
           <Trash2 className="h-4 w-4" />
         </Button>
