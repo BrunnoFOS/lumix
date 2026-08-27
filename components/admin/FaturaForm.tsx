@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Zap, Activity, TrendingUp, Target, CheckCircle2, AlertTriangle, X } from "lucide-react";
+import { Loader2, Zap, Activity, TrendingUp, Target, CheckCircle2, AlertTriangle, X, Search, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,8 +44,8 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
   const [clienteId, setClienteId] = useState<string>("");
   const [ucId, setUcId] = useState<string>("");
   const [mes, setMes] = useState<string>("");
-  const [geracaoInicio, setGeracaoInicio] = useState<string>("");
-  const [geracaoFim, setGeracaoFim] = useState<string>("");
+  const [inicioCiclo, setInicioCiclo] = useState<string>("");
+  const [fimCiclo, setFimCiclo] = useState<string>("");
 
   // Dados de geração
   const [geracao, setGeracao] = useState<SolisGeracaoMensal | null>(null);
@@ -55,26 +55,28 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
   const { status: processingStatus, start: startPolling, dismiss } = useFaturaProcessamento();
   const selectedUC = ucs.find((u) => u.id === ucId);
 
-  // Preencher datas padrão quando mês muda
+  // Preencher datas do ciclo quando mês muda
   useEffect(() => {
     if (mes) {
       const [y, m] = mes.split("-").map(Number);
       const lastDay = new Date(y, m, 0).getDate();
-      setGeracaoInicio(`${mes}-01`);
-      setGeracaoFim(`${mes}-${String(lastDay).padStart(2, "0")}`);
+      setInicioCiclo(`${mes}-01`);
+      setFimCiclo(`${mes}-${String(lastDay).padStart(2, "0")}`);
     }
   }, [mes]);
 
-  // Buscar geração quando UC + período mudarem
-  const buscarGeracao = useCallback(async () => {
-    if (!ucId || !geracaoInicio || !geracaoFim) {
-      setGeracao(null);
-      return;
-    }
+  // Limpar dados de geração quando UC ou ciclo mudarem
+  useEffect(() => {
+    setGeracao(null);
+    setGeracaoError(null);
+  }, [ucId, inicioCiclo, fimCiclo]);
+
+  // Buscar geração sob demanda (botão)
+  async function buscarGeracao() {
+    if (!ucId || !inicioCiclo || !fimCiclo) return;
 
     const uc = ucs.find((u) => u.id === ucId);
     if (!uc?.station_id) {
-      setGeracao(null);
       setGeracaoError("UC sem vinculação com provedor (sem station_id).");
       return;
     }
@@ -82,11 +84,11 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
     setLoadingGeracao(true);
     setGeracaoError(null);
 
-    const month = geracaoFim.slice(0, 7);
+    const month = fimCiclo.slice(0, 7);
 
-    let result = await fetchGeracaoMensal(uc.station_id, month, "solis", geracaoInicio, geracaoFim);
+    let result = await fetchGeracaoMensal(uc.station_id, month, "solis", inicioCiclo, fimCiclo);
     if (result.error || !result.data) {
-      result = await fetchGeracaoMensal(uc.station_id, month, "sungrow", geracaoInicio, geracaoFim);
+      result = await fetchGeracaoMensal(uc.station_id, month, "sungrow", inicioCiclo, fimCiclo);
     }
 
     if (result.error) {
@@ -96,11 +98,7 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
       setGeracao(result.data);
     }
     setLoadingGeracao(false);
-  }, [ucId, geracaoInicio, geracaoFim, ucs]);
-
-  useEffect(() => {
-    buscarGeracao();
-  }, [buscarGeracao]);
+  }
 
   const [state, formAction, isPending] = useActionState(
     async (_prev: FormState | null, formData: FormData): Promise<FormState> => {
@@ -295,6 +293,8 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
                 id="inicio_ciclo"
                 name="inicio_ciclo"
                 type="date"
+                value={inicioCiclo}
+                onChange={(e) => setInicioCiclo(e.target.value)}
               />
             </div>
 
@@ -304,6 +304,8 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
                 id="fim_ciclo"
                 name="fim_ciclo"
                 type="date"
+                value={fimCiclo}
+                onChange={(e) => setFimCiclo(e.target.value)}
               />
             </div>
           </CardContent>
@@ -318,36 +320,43 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
                 Dados de geração
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="mb-4 grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="geracao_inicio">Data início</Label>
-                  <Input
-                    id="geracao_inicio"
-                    type="date"
-                    value={geracaoInicio}
-                    onChange={(e) => setGeracaoInicio(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="geracao_fim">Data fim</Label>
-                  <Input
-                    id="geracao_fim"
-                    type="date"
-                    value={geracaoFim}
-                    onChange={(e) => setGeracaoFim(e.target.value)}
-                  />
-                </div>
-              </div>
+            <CardContent className="space-y-4">
+              {!geracao && !loadingGeracao && !geracaoError && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={buscarGeracao}
+                  disabled={!selectedUC?.station_id}
+                >
+                  <Search className="mr-2 h-4 w-4" />
+                  Buscar dados de geração
+                </Button>
+              )}
 
-              {loadingGeracao ? (
+              {!selectedUC?.station_id && !loadingGeracao && !geracao && (
+                <p className="text-sm text-amber-600">
+                  UC sem vinculação com provedor (sem station_id).
+                </p>
+              )}
+
+              {loadingGeracao && (
                 <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Buscando dados de geração do provedor...
                 </div>
-              ) : geracaoError ? (
-                <div className="py-2 text-sm text-amber-600">{geracaoError}</div>
-              ) : geracao ? (
+              )}
+
+              {geracaoError && !loadingGeracao && (
+                <div className="flex items-center gap-2 py-2">
+                  <p className="text-sm text-amber-600">{geracaoError}</p>
+                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={buscarGeracao}>
+                    <RefreshCw className="mr-1 h-3 w-3" />
+                    Tentar novamente
+                  </Button>
+                </div>
+              )}
+
+              {geracao && !loadingGeracao && (
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
@@ -356,6 +365,10 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
                     <span className="text-muted-foreground">
                       {geracao.periodo.dias_com_dados}/{geracao.periodo.dias_do_mes} dias com dados
                     </span>
+                    <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={buscarGeracao}>
+                      <RefreshCw className="mr-1 h-3 w-3" />
+                      Rebuscar
+                    </Button>
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -389,10 +402,6 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
                     </div>
                   </div>
                 </div>
-              ) : (
-                <p className="py-2 text-sm text-muted-foreground">
-                  Selecione uma UC vinculada e o mês para buscar os dados de geração.
-                </p>
               )}
             </CardContent>
           </Card>

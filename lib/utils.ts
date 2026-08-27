@@ -29,7 +29,11 @@ export function formatKWh(value: number): string {
 }
 
 export function formatDate(date: string): string {
-  return new Intl.DateTimeFormat("pt-BR").format(new Date(date));
+  // Datas no formato YYYY-MM-DD são parseadas como UTC por new Date(),
+  // causando shift de -1 dia em fusos negativos (ex: BRT UTC-3).
+  // Adicionamos T00:00 para forçar interpretação como horário local.
+  const d = date.includes("T") ? new Date(date) : new Date(`${date}T00:00`);
+  return new Intl.DateTimeFormat("pt-BR").format(d);
 }
 
 export function formatDateTime(date: string): string {

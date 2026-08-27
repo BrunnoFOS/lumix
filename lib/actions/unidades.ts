@@ -361,6 +361,47 @@ export async function arquivarUC(
   return {};
 }
 
+// ——— Batch Actions ———
+
+interface BatchResult {
+  succeeded: string[];
+  failed: { id: string; error: string }[];
+}
+
+export async function toggleUCsEmLote(ids: string[], ativa: boolean): Promise<BatchResult> {
+  const supabase = await createServerClient();
+
+  const { error } = await supabase
+    .from("unidades_consumidoras")
+    .update({ ativa })
+    .in("id", ids);
+
+  if (error) {
+    return { succeeded: [], failed: ids.map((id) => ({ id, error: "Erro ao alterar status." })) };
+  }
+
+  revalidatePath("/admin/unidades");
+  revalidatePath("/admin/clientes", "layout");
+  return { succeeded: ids, failed: [] };
+}
+
+export async function arquivarUCsEmLote(ids: string[], arquivada: boolean): Promise<BatchResult> {
+  const supabase = await createServerClient();
+
+  const { error } = await supabase
+    .from("unidades_consumidoras")
+    .update({ arquivada })
+    .in("id", ids);
+
+  if (error) {
+    return { succeeded: [], failed: ids.map((id) => ({ id, error: "Erro ao arquivar/desarquivar." })) };
+  }
+
+  revalidatePath("/admin/unidades");
+  revalidatePath("/admin/clientes", "layout");
+  return { succeeded: ids, failed: [] };
+}
+
 export async function getUCs(search?: string, empresaId?: string, status?: string) {
   const supabase = await createServerClient();
 

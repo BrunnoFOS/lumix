@@ -8,6 +8,7 @@ import {
   normalizarNomeMunicipio,
   estadoParaUF,
   diasNoMes,
+  calcularSegmentosCiclo,
 } from "@/lib/geracao-estimada";
 
 describe("diasNoMes", () => {
@@ -206,6 +207,67 @@ describe("formatarPR", () => {
     expect(formatarPR(82)).toBe(
       "82% do potencial da usina foi atingido — Ruim"
     );
+  });
+});
+
+describe("calcularSegmentosCiclo", () => {
+  it("retorna segmento unico para ciclo dentro do mesmo mes", () => {
+    const segmentos = calcularSegmentosCiclo("2026-05-01", "2026-05-31");
+    expect(segmentos).toEqual([{ mes: 4, ano: 2026, dias: 31 }]);
+  });
+
+  it("pondera dois meses quando ciclo cruza meses", () => {
+    // 13/05 a 12/06: 19 dias em maio + 12 dias em junho
+    const segmentos = calcularSegmentosCiclo("2026-05-13", "2026-06-12");
+    expect(segmentos).toEqual([
+      { mes: 4, ano: 2026, dias: 19 },
+      { mes: 5, ano: 2026, dias: 12 },
+    ]);
+  });
+
+  it("calcula corretamente os dias inclusivos", () => {
+    // 20/06 a 19/07: 11 dias em junho (20-30) + 19 dias em julho (1-19)
+    const segmentos = calcularSegmentosCiclo("2026-06-20", "2026-07-19");
+    expect(segmentos).toEqual([
+      { mes: 5, ano: 2026, dias: 11 },
+      { mes: 6, ano: 2026, dias: 19 },
+    ]);
+  });
+
+  it("funciona quando ciclo cruza tres meses", () => {
+    // 25/05 a 05/07
+    // maio: 25-31 = 7 dias, junho: 1-30 = 30 dias, julho: 1-5 = 5 dias
+    const segmentos = calcularSegmentosCiclo("2026-05-25", "2026-07-05");
+    expect(segmentos).toEqual([
+      { mes: 4, ano: 2026, dias: 7 },
+      { mes: 5, ano: 2026, dias: 30 },
+      { mes: 6, ano: 2026, dias: 5 },
+    ]);
+  });
+
+  it("funciona quando ciclo cruza virada de ano", () => {
+    // 15/12 a 15/01: 17 dias em dezembro (15-31) + 15 dias em janeiro (1-15)
+    const segmentos = calcularSegmentosCiclo("2026-12-15", "2027-01-15");
+    expect(segmentos).toEqual([
+      { mes: 11, ano: 2026, dias: 17 },
+      { mes: 0, ano: 2027, dias: 15 },
+    ]);
+  });
+
+  it("trata fevereiro em ano bissexto", () => {
+    // Ciclo dentro de fevereiro de ano bissexto (2024)
+    const segmentos = calcularSegmentosCiclo("2024-02-01", "2024-02-29");
+    expect(segmentos).toEqual([{ mes: 1, ano: 2024, dias: 29 }]);
+  });
+
+  it("retorna array vazio quando fim < inicio", () => {
+    const segmentos = calcularSegmentosCiclo("2026-06-15", "2026-05-15");
+    expect(segmentos).toEqual([]);
+  });
+
+  it("retorna 1 dia quando inicio == fim", () => {
+    const segmentos = calcularSegmentosCiclo("2026-05-15", "2026-05-15");
+    expect(segmentos).toEqual([{ mes: 4, ano: 2026, dias: 1 }]);
   });
 });
 

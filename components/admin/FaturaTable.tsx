@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { FileText, Download, Eye, ExternalLink } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { FileText, Download, Eye, CheckCircle, XCircle, Trash2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { exportToCSV } from "@/lib/export-csv";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +18,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { formatCurrency, formatMesReferencia, formatKWh, gerarNomeRelatorio } from "@/lib/utils";
+import { deleteFaturasEmLote, confirmarFaturasEmLote, rejeitarFaturasEmLote } from "@/lib/actions/faturas";
+import { BulkActionBar } from "@/components/admin/BulkActionBar";
+import { useRowSelection } from "@/hooks/use-row-selection";
 
 interface FaturaRow {
   id: string;
@@ -48,12 +67,14 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   processada: "default",
   pendente: "secondary",
   erro: "destructive",
+  rejeitada: "destructive",
 };
 
 const STATUS_LABELS: Record<string, string> = {
   processada: "Processada",
   pendente: "Pendente",
   erro: "Erro",
+  rejeitada: "Rejeitada",
 };
 
 const ENVIO_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -69,6 +90,24 @@ export function FaturaTable({
   faturas: FaturaRow[];
   relatorios?: Record<string, RelatorioInfo>;
 }) {
+  const router = useRouter();
+  const [processing, setProcessing] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [bulkConfirmDialogOpen, setBulkConfirmDialogOpen] = useState(false);
+  const [bulkRejectDialogOpen, setBulkRejectDialogOpen] = useState(false);
+  const [rejectMotivo, setRejectMotivo] = useState("");
+
+  const {
+    selectedIds,
+    toggle,
+    toggleAll,
+    clearSelection,
+    isSelected,
+    isAllSelected,
+    isIndeterminate,
+    selectedCount,
+  } = useRowSelection(faturas);
+
   if (faturas.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-12">
@@ -81,11 +120,99 @@ export function FaturaTable({
   }
 
   function handleExport() {
-    exportToCSV("faturas", ["Cliente", "UC", "Mês ref.", "Contrato", "Valor faturado", "Consumo kWh", "Status"], faturas.map((f) => [
+    exportToCSV("faturas", ["Cliente", "UC", "Mes ref.", "Contrato", "Valor faturado", "Consumo kWh", "Status"], faturas.map((f) => [
       f.uc?.empresa?.nome, f.uc?.codigo_uc, f.mes_referencia, f.contrato,
       f.valor_faturado ?? f.valor_total, f.consumo_kwh, f.status,
     ]));
   }
+
+  async function handleBulkConfirm() {
+    setProcessing(true);
+    const ids = Array.from(selectedIds);
+    const result = await confirmarFaturasEmLote(ids);
+
+    if (result.failed.length === 0) {
+      toast.success(`${result.succeeded.length} fatura(s) confirmada(s). Relatorios serao gerados automaticamente.`);
+    } else if (result.succeeded.length === 0) {
+      toast.error(`Nenhuma fatura foi confirmada. ${result.failed[0]?.error ?? ""}`);
+    } else {
+      toast.warning(`${result.succeeded.length} confirmada(s). ${result.failed.length} falha(s): ${result.failed[0]?.error ?? ""}`);
+    }
+
+    setBulkConfirmDialogOpen(false);
+    clearSelection();
+    setProcessing(false);
+    router.refresh();
+  }
+
+  async function handleBulkReject() {
+    if (!rejectMotivo.trim()) {
+      toast.error("Informe o motivo da rejeicao.");
+      return;
+    }
+
+    setProcessing(true);
+    const ids = Array.from(selectedIds);
+    const result = await rejeitarFaturasEmLote(ids, rejectMotivo.trim());
+
+    if (result.failed.length === 0) {
+      toast.success(`${result.succeeded.length} fatura(s) rejeitada(s).`);
+    } else if (result.succeeded.length === 0) {
+      toast.error(`Nenhuma fatura foi rejeitada. ${result.failed[0]?.error ?? ""}`);
+    } else {
+      toast.warning(`${result.succeeded.length} rejeitada(s). ${result.failed.length} falha(s): ${result.failed[0]?.error ?? ""}`);
+    }
+
+    setBulkRejectDialogOpen(false);
+    setRejectMotivo("");
+    clearSelection();
+    setProcessing(false);
+    router.refresh();
+  }
+
+  async function handleBulkDelete() {
+    setProcessing(true);
+    const ids = Array.from(selectedIds);
+    const result = await deleteFaturasEmLote(ids);
+
+    if (result.failed.length === 0) {
+      toast.success(`${result.succeeded.length} fatura(s) excluida(s).`);
+    } else if (result.succeeded.length === 0) {
+      toast.error(`Nenhuma fatura foi excluida. ${result.failed[0]?.error ?? ""}`);
+    } else {
+      toast.warning(`${result.succeeded.length} excluida(s). ${result.failed.length} falha(s).`);
+    }
+
+    setBulkDeleteDialogOpen(false);
+    clearSelection();
+    setProcessing(false);
+    router.refresh();
+  }
+
+  const selectedFaturas = faturas.filter((f) => selectedIds.has(f.id));
+  const hasPendentes = selectedFaturas.some((f) => f.status === "pendente");
+
+  const bulkActions = [];
+  if (hasPendentes) {
+    bulkActions.push({
+      label: "Confirmar",
+      icon: <CheckCircle className="mr-2 h-4 w-4" />,
+      onClick: () => setBulkConfirmDialogOpen(true),
+      className: "bg-green-600 hover:bg-green-700 text-white",
+    });
+    bulkActions.push({
+      label: "Rejeitar",
+      icon: <XCircle className="mr-2 h-4 w-4" />,
+      onClick: () => setBulkRejectDialogOpen(true),
+      variant: "destructive" as const,
+    });
+  }
+  bulkActions.push({
+    label: "Excluir",
+    icon: <Trash2 className="mr-2 h-4 w-4" />,
+    onClick: () => setBulkDeleteDialogOpen(true),
+    variant: "destructive" as const,
+  });
 
   return (
     <div className="space-y-3">
@@ -95,17 +222,30 @@ export function FaturaTable({
           Exportar CSV
         </Button>
       </div>
+      <BulkActionBar
+        selectedCount={selectedCount}
+        onClear={clearSelection}
+        actions={bulkActions}
+        processing={processing}
+      />
       <div className="rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-12">
+                <Checkbox
+                  checked={isAllSelected}
+                  indeterminate={isIndeterminate}
+                  onCheckedChange={toggleAll}
+                />
+              </TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>UC</TableHead>
-              <TableHead>Mês ref.</TableHead>
+              <TableHead>Mes ref.</TableHead>
               <TableHead className="text-right">Valor</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Relatório</TableHead>
-              <TableHead className="w-24">Ações</TableHead>
+              <TableHead>Relatorio</TableHead>
+              <TableHead className="w-24">Acoes</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -114,11 +254,17 @@ export function FaturaTable({
               const rel = relatorios[key];
 
               return (
-                <TableRow key={fatura.id}>
-                  <TableCell className="font-medium">
-                    {fatura.uc?.empresa?.nome || "—"}
+                <TableRow key={fatura.id} data-state={isSelected(fatura.id) ? "selected" : undefined}>
+                  <TableCell>
+                    <Checkbox
+                      checked={isSelected(fatura.id)}
+                      onCheckedChange={() => toggle(fatura.id)}
+                    />
                   </TableCell>
-                  <TableCell>{fatura.uc?.codigo_uc || "—"}</TableCell>
+                  <TableCell className="font-medium">
+                    {fatura.uc?.empresa?.nome || "\u2014"}
+                  </TableCell>
+                  <TableCell>{fatura.uc?.codigo_uc || "\u2014"}</TableCell>
                   <TableCell className="capitalize">
                     {formatMesReferencia(fatura.mes_referencia)}
                   </TableCell>
@@ -127,7 +273,7 @@ export function FaturaTable({
                       ? formatCurrency(fatura.valor_faturado)
                       : fatura.valor_total !== null
                         ? formatCurrency(fatura.valor_total)
-                        : "—"}
+                        : "\u2014"}
                   </TableCell>
                   <TableCell>
                     <Badge variant={STATUS_VARIANT[fatura.status] || "outline"}>
@@ -173,12 +319,11 @@ export function FaturaTable({
                                 window.URL.revokeObjectURL(url);
                               } catch (error) {
                                 console.error("Erro ao baixar PDF:", error);
-                                // Fallback: abrir em nova aba
                                 window.open(rel.pdf_url!, "_blank");
                               }
                             }}
                             className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                            title="Baixar relatório"
+                            title="Baixar relatorio"
                           >
                             <Download className="h-3 w-3" />
                             Baixar
@@ -186,7 +331,7 @@ export function FaturaTable({
                         )}
                       </div>
                     ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
+                      <span className="text-xs text-muted-foreground">{"\u2014"}</span>
                     )}
                   </TableCell>
                   <TableCell>
@@ -217,6 +362,88 @@ export function FaturaTable({
           </TableBody>
         </Table>
       </div>
+
+      {/* Dialog de confirmacao em lote */}
+      <AlertDialog open={bulkConfirmDialogOpen} onOpenChange={setBulkConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar {selectedCount} fatura(s)</AlertDialogTitle>
+            <AlertDialogDescription>
+              Confirmar processamento de {selectedCount} fatura(s)? Relatorios serao gerados automaticamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={processing}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkConfirm}
+              disabled={processing}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {processing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Confirmar {selectedCount} fatura(s)
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog de rejeicao em lote */}
+      <AlertDialog open={bulkRejectDialogOpen} onOpenChange={(v) => { setBulkRejectDialogOpen(v); if (!v) setRejectMotivo(""); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rejeitar {selectedCount} fatura(s)</AlertDialogTitle>
+            <AlertDialogDescription>
+              Todas as faturas selecionadas serao rejeitadas com o mesmo motivo. O cliente podera ver o motivo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="motivo-rejeicao-lote">Motivo da rejeicao *</Label>
+            <Textarea
+              id="motivo-rejeicao-lote"
+              placeholder="Ex: Imagem ilegivel, fatura do mes errado..."
+              value={rejectMotivo}
+              onChange={(e) => setRejectMotivo(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={processing}>Cancelar</AlertDialogCancel>
+            <Button
+              onClick={handleBulkReject}
+              disabled={processing || !rejectMotivo.trim()}
+              variant="destructive"
+            >
+              {processing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Rejeitar {selectedCount} fatura(s)
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog de exclusao em lote */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {selectedCount} fatura(s)</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir permanentemente {selectedCount} fatura(s)?
+              <br />
+              <br />
+              Esta acao nao pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={processing}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={processing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {processing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Excluir {selectedCount} fatura(s)
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

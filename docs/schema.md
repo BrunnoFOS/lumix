@@ -190,7 +190,8 @@ Faturas de energia (dados inseridos manualmente pelo admin ou via upload de imag
 | pdf_url | text | | URL do PDF da fatura |
 | imagem_url | text | | URL da imagem da fatura (upload do cliente) |
 | dados_extraidos | jsonb | | Dados extraídos via API externa (OCR) |
-| status | text | NOT NULL, check in ('pendente','processada','erro'), default 'pendente' | Status do processamento |
+| status | text | NOT NULL, check in ('pendente','processada','erro','rejeitada'), default 'pendente' | Status do processamento |
+| motivo_rejeicao | text | nullable | Motivo da rejeição (obrigatório quando status = 'rejeitada') |
 | inserido_por | uuid | FK → profiles.id | Quem inseriu (admin ou cliente) |
 | created_at | timestamptz | NOT NULL, default now() | |
 | updated_at | timestamptz | NOT NULL, default now() | |

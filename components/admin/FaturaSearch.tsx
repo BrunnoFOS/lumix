@@ -77,6 +77,7 @@ export function FaturaSearch({ empresas }: Props) {
           <SelectItem value="todas">Todos status</SelectItem>
           <SelectItem value="pendente">Pendente</SelectItem>
           <SelectItem value="processada">Processada</SelectItem>
+          <SelectItem value="rejeitada">Rejeitada</SelectItem>
           <SelectItem value="erro">Erro</SelectItem>
         </SelectContent>
       </Select>

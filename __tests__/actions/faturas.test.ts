@@ -178,22 +178,16 @@ describe("createFaturaCliente", () => {
     expect(result.error).toBeUndefined();
   });
 
-  it("deve enviar webhook com role cliente quando há imagem", async () => {
+  it("não deve enviar webhook automaticamente (aguarda confirmação do admin)", async () => {
     formData.set("imagem_url", "https://ukobyfxffhtlywzmtaiq.supabase.co/storage/v1/object/public/faturas/img.jpg");
     const result = await createFaturaCliente(formData);
     expect(result.error).toBeUndefined();
-    expect(fetchSpy).toHaveBeenCalled();
-    const body = JSON.parse(fetchSpy.mock.calls[0][1]?.body as string);
-    expect(body.role).toBe("cliente");
-    expect(body.arquivo_url).toContain("supabase.co");
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("deve enviar webhook mesmo sem arquivo", async () => {
+  it("não deve enviar webhook mesmo sem arquivo", async () => {
     const result = await createFaturaCliente(formData);
     expect(result.error).toBeUndefined();
-    expect(fetchSpy).toHaveBeenCalled();
-    const body = JSON.parse(fetchSpy.mock.calls[0][1]?.body as string);
-    expect(body.arquivo_url).toBeNull();
-    expect(body.role).toBe("cliente");
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

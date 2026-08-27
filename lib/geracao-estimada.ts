@@ -172,6 +172,61 @@ export function formatarPR(prPercent: number): string {
   return `${Math.round(prPercent)}% do potencial da usina foi atingido — ${label}`;
 }
 
+export interface SegmentoMensal {
+  mes: number;   // 0-indexed (0 = janeiro)
+  ano: number;
+  dias: number;  // quantidade de dias neste segmento
+}
+
+/**
+ * Calcula os segmentos mensais de um ciclo de faturamento.
+ * Quando o ciclo cruza meses, retorna a quantidade de dias em cada mês.
+ *
+ * Ex: ciclo 13/05 a 12/06
+ * → [{ mes: 4, ano: 2026, dias: 19 }, { mes: 5, ano: 2026, dias: 12 }]
+ *
+ * As datas são inclusivas (início e fim contam como dia do ciclo).
+ */
+export function calcularSegmentosCiclo(inicioCiclo: string, fimCiclo: string): SegmentoMensal[] {
+  const inicio = new Date(`${inicioCiclo}T00:00`);
+  const fim = new Date(`${fimCiclo}T00:00`);
+
+  if (fim < inicio) return [];
+
+  const segmentos: SegmentoMensal[] = [];
+
+  let mesAtual = inicio.getMonth();
+  let anoAtual = inicio.getFullYear();
+
+  while (true) {
+    const primeiroDia =
+      anoAtual === inicio.getFullYear() && mesAtual === inicio.getMonth()
+        ? inicio.getDate()
+        : 1;
+
+    const ultimoDiaDoMes = new Date(anoAtual, mesAtual + 1, 0).getDate();
+    const ultimoDia =
+      anoAtual === fim.getFullYear() && mesAtual === fim.getMonth()
+        ? fim.getDate()
+        : ultimoDiaDoMes;
+
+    const dias = ultimoDia - primeiroDia + 1;
+    if (dias > 0) {
+      segmentos.push({ mes: mesAtual, ano: anoAtual, dias });
+    }
+
+    if (anoAtual === fim.getFullYear() && mesAtual === fim.getMonth()) break;
+
+    mesAtual++;
+    if (mesAtual > 11) {
+      mesAtual = 0;
+      anoAtual++;
+    }
+  }
+
+  return segmentos;
+}
+
 export interface UCParaEstimativa {
   potencia_instalada_kwp: number | null;
   cidade: string | null;

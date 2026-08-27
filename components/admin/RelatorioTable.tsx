@@ -8,6 +8,7 @@ import {
   CheckCircle,
   Download,
   Archive,
+  ArchiveRestore,
   Pencil,
   X,
   Upload,
@@ -18,6 +19,7 @@ import {
   ChevronRight,
   Trash2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { exportToCSV } from "@/lib/export-csv";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +56,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { formatCurrency, formatKWh, formatMesReferencia, formatDateTime, gerarNomeRelatorio } from "@/lib/utils";
 import {
   updateRelatorioStatus,
@@ -61,8 +64,13 @@ import {
   desarquivarRelatorio,
   updateRelatorioAnexo,
   deleteRelatorio,
+  arquivarRelatoriosEmLote,
+  desarquivarRelatoriosEmLote,
+  deleteRelatoriosEmLote,
 } from "@/lib/actions/relatorios";
 import { createClient } from "@/lib/supabase/client";
+import { BulkActionBar } from "@/components/admin/BulkActionBar";
+import { useRowSelection } from "@/hooks/use-row-selection";
 
 interface RelatorioRow {
   id: string;
@@ -127,6 +135,8 @@ export function RelatorioTable({
   const [currentPage, setCurrentPage] = useState(1);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const PAGE_SIZE = 10;
 
   useEffect(() => {
@@ -138,6 +148,17 @@ export function RelatorioTable({
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE
   );
+
+  const {
+    selectedIds,
+    toggle,
+    toggleAll,
+    clearSelection,
+    isSelected,
+    isAllSelected,
+    isIndeterminate,
+    selectedCount,
+  } = useRowSelection(paginatedRelatorios);
 
   async function handleMarcarEnviado(id: string) {
     await updateRelatorioStatus(id, "enviado");
@@ -180,6 +201,57 @@ export function RelatorioTable({
     setDeletingId(null);
   }
 
+  async function handleBulkArchive() {
+    setProcessing(true);
+    const ids = Array.from(selectedIds);
+    const result = await arquivarRelatoriosEmLote(ids);
+
+    if (result.failed.length === 0) {
+      toast.success(`${result.succeeded.length} relatorio(s) arquivado(s).`);
+    } else if (result.succeeded.length === 0) {
+      toast.error(`Nenhum relatorio foi arquivado. ${result.failed[0]?.error ?? ""}`);
+    } else {
+      toast.warning(`${result.succeeded.length} arquivado(s). ${result.failed.length} falha(s): ${result.failed[0]?.error ?? ""}`);
+    }
+
+    clearSelection();
+    setProcessing(false);
+    router.refresh();
+  }
+
+  async function handleBulkUnarchive() {
+    setProcessing(true);
+    const ids = Array.from(selectedIds);
+    const result = await desarquivarRelatoriosEmLote(ids);
+
+    if (result.failed.length === 0) {
+      toast.success(`${result.succeeded.length} relatorio(s) desarquivado(s).`);
+    } else {
+      toast.error("Erro ao desarquivar relatorios.");
+    }
+
+    clearSelection();
+    setProcessing(false);
+    router.refresh();
+  }
+
+  async function confirmBulkDelete() {
+    setProcessing(true);
+    const ids = Array.from(selectedIds);
+    const result = await deleteRelatoriosEmLote(ids);
+
+    if (result.failed.length === 0) {
+      toast.success(`${result.succeeded.length} relatorio(s) excluido(s).`);
+    } else {
+      toast.error("Erro ao excluir relatorios.");
+    }
+
+    setBulkDeleteDialogOpen(false);
+    clearSelection();
+    setProcessing(false);
+    router.refresh();
+  }
+
   async function handleFileChange(
     relId: string,
     e: React.ChangeEvent<HTMLInputElement>
@@ -188,7 +260,7 @@ export function RelatorioTable({
     if (!file) return;
 
     if (file.size > 10 * 1024 * 1024) {
-      setUploadError("Arquivo muito grande. Máximo: 10MB.");
+      setUploadError("Arquivo muito grande. Maximo: 10MB.");
       return;
     }
 
@@ -235,8 +307,8 @@ export function RelatorioTable({
       [
         "Cliente",
         "UC",
-        "Mês ref.",
-        "Geração kWh",
+        "Mes ref.",
+        "Geracao kWh",
         "Economia R$",
         "Performance",
         "Status",
@@ -260,10 +332,36 @@ export function RelatorioTable({
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-12">
         <FileText className="h-10 w-10 text-muted-foreground/50" />
         <p className="mt-3 text-sm text-muted-foreground">
-          Nenhum relatório encontrado.
+          Nenhum relatorio encontrado.
         </p>
       </div>
     );
+  }
+
+  const selectedRels = paginatedRelatorios.filter((r) => selectedIds.has(r.id));
+  const hasArquivados = selectedRels.some((r) => r.arquivado);
+  const hasNaoArquivados = selectedRels.some((r) => !r.arquivado && r.status_envio !== "enviado");
+
+  const bulkActions = [];
+  if (hasNaoArquivados) {
+    bulkActions.push({
+      label: "Arquivar",
+      icon: <Archive className="mr-2 h-4 w-4" />,
+      onClick: handleBulkArchive,
+    });
+  }
+  if (hasArquivados) {
+    bulkActions.push({
+      label: "Desarquivar",
+      icon: <ArchiveRestore className="mr-2 h-4 w-4" />,
+      onClick: handleBulkUnarchive,
+    });
+    bulkActions.push({
+      label: "Excluir",
+      icon: <Trash2 className="mr-2 h-4 w-4" />,
+      onClick: () => setBulkDeleteDialogOpen(true),
+      variant: "destructive" as const,
+    });
   }
 
   return (
@@ -274,15 +372,28 @@ export function RelatorioTable({
           Exportar CSV
         </Button>
       </div>
+      <BulkActionBar
+        selectedCount={selectedCount}
+        onClear={clearSelection}
+        actions={bulkActions}
+        processing={processing}
+      />
       <div className="rounded-lg border border-border overflow-hidden">
         <Table className="table-fixed w-full">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[18%]">Cliente</TableHead>
+              <TableHead className="w-[3%]">
+                <Checkbox
+                  checked={isAllSelected}
+                  indeterminate={isIndeterminate}
+                  onCheckedChange={toggleAll}
+                />
+              </TableHead>
+              <TableHead className="w-[17%]">Cliente</TableHead>
               <TableHead className="w-[10%]">UC</TableHead>
-              <TableHead className="w-[8%]">Tipo</TableHead>
-              <TableHead className="w-[10%]">Mês ref.</TableHead>
-              <TableHead className="w-[10%] text-right">Geração</TableHead>
+              <TableHead className="w-[7%]">Tipo</TableHead>
+              <TableHead className="w-[9%]">Mes ref.</TableHead>
+              <TableHead className="w-[10%] text-right">Geracao</TableHead>
               <TableHead className="w-[10%] text-right">Economia</TableHead>
               <TableHead className="w-[12%]">Performance</TableHead>
               <TableHead className="w-[8%]">Envio</TableHead>
@@ -295,12 +406,18 @@ export function RelatorioTable({
               const isPendente = rel.status_envio !== "enviado";
 
               return (
-                <TableRow key={rel.id}>
-                  <TableCell className="font-medium truncate max-w-0" title={rel.empresa?.nome || "—"}>
-                    {rel.empresa?.nome || "—"}
+                <TableRow key={rel.id} data-state={isSelected(rel.id) ? "selected" : undefined}>
+                  <TableCell>
+                    <Checkbox
+                      checked={isSelected(rel.id)}
+                      onCheckedChange={() => toggle(rel.id)}
+                    />
                   </TableCell>
-                  <TableCell className="truncate max-w-0" title={rel.uc?.codigo_uc || "—"}>
-                    {rel.uc?.codigo_uc || "—"}
+                  <TableCell className="font-medium truncate max-w-0" title={rel.empresa?.nome || "\u2014"}>
+                    {rel.empresa?.nome || "\u2014"}
+                  </TableCell>
+                  <TableCell className="truncate max-w-0" title={rel.uc?.codigo_uc || "\u2014"}>
+                    {rel.uc?.codigo_uc || "\u2014"}
                   </TableCell>
                   <TableCell>
                     <Badge
@@ -320,17 +437,17 @@ export function RelatorioTable({
                   <TableCell className="text-right tabular-nums whitespace-nowrap">
                     {rel.geracao_kwh !== null
                       ? formatKWh(rel.geracao_kwh)
-                      : "—"}
+                      : "\u2014"}
                   </TableCell>
                   <TableCell className="text-right tabular-nums whitespace-nowrap">
                     {rel.economia_reais !== null
                       ? formatCurrency(rel.economia_reais)
-                      : "—"}
+                      : "\u2014"}
                   </TableCell>
                   <TableCell>
                     {(() => {
                       const hasPR = rel.geracao_kwh != null && rel.geracao_estimada_kwh != null && rel.geracao_estimada_kwh > 0;
-                      if (!hasPR && !rel.indice_performance) return "—";
+                      if (!hasPR && !rel.indice_performance) return "\u2014";
 
                       const pr = hasPR ? (rel.geracao_kwh! / rel.geracao_estimada_kwh!) * 100 : null;
                       const prRounded = pr != null ? Math.round(pr) : null;
@@ -366,7 +483,7 @@ export function RelatorioTable({
                     </Badge>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground hidden lg:table-cell">
-                    {rel.created_at ? formatDateTime(rel.created_at) : "—"}
+                    {rel.created_at ? formatDateTime(rel.created_at) : "\u2014"}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
@@ -479,11 +596,11 @@ export function RelatorioTable({
         </Table>
       </div>
 
-      {/* Paginação */}
+      {/* Paginacao */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between px-1">
           <p className="text-sm text-muted-foreground">
-            {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, relatorios.length)} de {relatorios.length} relatórios
+            {(currentPage - 1) * PAGE_SIZE + 1}\u2013{Math.min(currentPage * PAGE_SIZE, relatorios.length)} de {relatorios.length} relatorios
           </p>
           <div className="flex items-center gap-2">
             <Button
@@ -504,14 +621,14 @@ export function RelatorioTable({
               disabled={currentPage === totalPages}
               onClick={() => setCurrentPage((p) => p + 1)}
             >
-              Próximo
+              Proximo
               <ChevronRight className="ml-1 h-4 w-4" />
             </Button>
           </div>
         </div>
       )}
 
-      {/* Dialog de edição de fatura */}
+      {/* Dialog de edicao de fatura */}
       <Dialog
         open={editingId !== null}
         onOpenChange={(open) => {
@@ -575,22 +692,22 @@ export function RelatorioTable({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              JPG, PNG ou PDF — máx. 10MB
+              JPG, PNG ou PDF \u2014 max. 10MB
             </p>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de confirmação de exclusão */}
+      {/* Dialog de confirmacao de exclusao individual */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir relatório</AlertDialogTitle>
+            <AlertDialogTitle>Excluir relatorio</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir permanentemente este relatório?
+              Tem certeza que deseja excluir permanentemente este relatorio?
               <br />
               <br />
-              Esta ação não pode ser desfeita.
+              Esta acao nao pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -600,6 +717,32 @@ export function RelatorioTable({
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog de confirmacao de exclusao em lote */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {selectedCount} relatorio(s)</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir permanentemente {selectedCount} relatorio(s)?
+              <br />
+              <br />
+              Esta acao nao pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={processing}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBulkDelete}
+              disabled={processing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {processing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Excluir {selectedCount} relatorio(s)
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

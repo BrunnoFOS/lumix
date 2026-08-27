@@ -125,6 +125,29 @@ export async function arquivarEmpresa(
   return {};
 }
 
+// ——— Batch Actions ———
+
+interface BatchResult {
+  succeeded: string[];
+  failed: { id: string; error: string }[];
+}
+
+export async function arquivarEmpresasEmLote(ids: string[], arquivada: boolean): Promise<BatchResult> {
+  const supabase = await createServerClient();
+
+  const { error } = await supabase
+    .from("empresas")
+    .update({ arquivada, ativa: !arquivada })
+    .in("id", ids);
+
+  if (error) {
+    return { succeeded: [], failed: ids.map((id) => ({ id, error: "Erro ao arquivar/desarquivar." })) };
+  }
+
+  revalidatePath("/admin/clientes");
+  return { succeeded: ids, failed: [] };
+}
+
 export async function getEmpresas(search?: string, status?: string) {
   const supabase = await createServerClient();
 

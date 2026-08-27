@@ -406,7 +406,7 @@ export async function getFatura(id: string) {
 
   const { data, error } = await supabase
     .from("faturas")
-    .select("*, uc:unidades_consumidoras(id, codigo_uc, titular, distribuidora, empresa:empresas(id, nome))")
+    .select("*, uc:unidades_consumidoras(id, codigo_uc, titular, distribuidora, empresa:empresas(id, nome)), uploader:profiles!inserido_por(id, role)")
     .eq("id", id)
     .single();
 
@@ -419,7 +419,9 @@ export async function getFatura(id: string) {
     const empresaRaw = (uc as Record<string, unknown>).empresa;
     (uc as Record<string, unknown>).empresa = Array.isArray(empresaRaw) ? empresaRaw[0] ?? null : empresaRaw;
   }
-  return { ...data, uc };
+  const uploaderRaw = data.uploader as unknown;
+  const uploader = Array.isArray(uploaderRaw) ? uploaderRaw[0] ?? null : uploaderRaw;
+  return { ...data, uc, uploader } as typeof data & { uploader: { id: string; role: string } | null };
 }
 
 export async function getFaturasCliente(empresaIds: string | string[]) {
@@ -428,7 +430,7 @@ export async function getFaturasCliente(empresaIds: string | string[]) {
 
   const { data, error } = await supabase
     .from("faturas")
-    .select("id, uc_id, mes_referencia, valor_faturado, valor_total, consumo_kwh, status, pdf_url, imagem_url, uc:unidades_consumidoras!inner(id, codigo_uc, empresa_id)")
+    .select("id, uc_id, mes_referencia, valor_faturado, valor_total, consumo_kwh, status, motivo_rejeicao, pdf_url, imagem_url, uc:unidades_consumidoras!inner(id, codigo_uc, empresa_id)")
     .in("uc.empresa_id", ids)
     .order("mes_referencia", { ascending: false });
 
@@ -440,7 +442,7 @@ export async function getFaturasCliente(empresaIds: string | string[]) {
     return { ...row, uc } as {
       id: string; uc_id: string; mes_referencia: string; valor_faturado: number | null;
       valor_total: number | null; consumo_kwh: number | null; status: string;
-      pdf_url: string | null; imagem_url: string | null;
+      motivo_rejeicao: string | null; pdf_url: string | null; imagem_url: string | null;
       uc: { id: string; codigo_uc: string } | null;
     };
   });
@@ -482,8 +484,6 @@ export async function createFaturaCliente(formData: FormData): Promise<ActionRes
     return { error: "Erro ao enviar fatura." };
   }
 
-  const arquivoUrl = imagem_url || pdf_url || null;
-
   // Buscar código da UC para a notificação
   const { data: ucData } = await supabase
     .from("unidades_consumidoras")
@@ -491,28 +491,239 @@ export async function createFaturaCliente(formData: FormData): Promise<ActionRes
     .eq("id", uc_id)
     .single();
 
-  // Criar notificação para admins
+  // Criar notificação para admins (informativo — admin decide se confirma)
   await criarNotificacao(
     "fatura_cliente",
     `Nova fatura enviada pelo cliente - UC ${ucData?.codigo_uc ?? uc_id}`,
     data.id
   );
 
-  const webhookPayload = {
-    fatura_id: data.id,
-    uc_id,
-    mes_referencia,
-    arquivo_url: arquivoUrl,
-    role: "cliente" as const,
-    user_id: user?.id ?? "",
-  };
-
-  afterResponse(async () => {
-    await enviarWebhookFatura(webhookPayload);
-  });
-
   revalidatePath("/cliente/fatura");
   return { data: { id: data.id } };
+}
+
+// ——— Aprovação/rejeição de fatura do cliente pelo admin ———
+
+export async function confirmarFaturaCliente(
+  faturaId: string,
+  extras?: { dadosGeracao?: unknown; stationId?: string }
+): Promise<ActionResult> {
+  const supabase = await createServerClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.role !== "admin") return { error: "Apenas administradores podem confirmar faturas." };
+
+  const { data: fatura, error: fetchError } = await supabase
+    .from("faturas")
+    .select("id, uc_id, mes_referencia, inicio_ciclo, fim_ciclo, imagem_url, pdf_url, status, inserido_por")
+    .eq("id", faturaId)
+    .single();
+
+  if (fetchError || !fatura) return { error: "Fatura não encontrada." };
+  if (fatura.status !== "pendente") return { error: "Apenas faturas pendentes podem ser confirmadas." };
+
+  const arquivoUrl = fatura.imagem_url || fatura.pdf_url || null;
+
+  // Processar dados de geração se fornecidos
+  let dadosGeracao = extras?.dadosGeracao ? structuredClone(extras.dadosGeracao) as Record<string, Record<string, unknown>> : null;
+
+  if (dadosGeracao?.totais?.geracao_kwh) {
+    const { calcularGeracaoEstimadaUC } = await import("@/lib/actions/geracao-estimada");
+    const resultado = await calcularGeracaoEstimadaUC(
+      fatura.uc_id,
+      fatura.mes_referencia,
+      dadosGeracao.totais.geracao_kwh as number,
+      fatura.inicio_ciclo ?? undefined,
+      fatura.fim_ciclo ?? undefined
+    );
+
+    if ("data" in resultado && resultado.data) {
+      dadosGeracao.totais.geracao_estimada_kwh = resultado.data.geracao_estimada_kwh;
+    }
+  }
+
+  const webhookPayload: Record<string, unknown> = {
+    fatura_id: fatura.id,
+    uc_id: fatura.uc_id,
+    mes_referencia: fatura.mes_referencia,
+    arquivo_url: arquivoUrl,
+    role: "cliente" as const,
+    user_id: fatura.inserido_por ?? "",
+  };
+
+  if (dadosGeracao) {
+    webhookPayload.dados_geracao = dadosGeracao;
+  }
+  if (extras?.stationId) {
+    webhookPayload.station_id = extras.stationId;
+  }
+
+  afterResponse(async () => {
+    const controller = new AbortController();
+    const webhookTimeout = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      await fetch(WEBHOOK_FATURA_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(webhookPayload),
+        signal: controller.signal,
+      });
+      clearTimeout(webhookTimeout);
+    } catch {
+      clearTimeout(webhookTimeout);
+    }
+  });
+
+  revalidatePath(`/admin/faturas/${faturaId}`);
+  revalidatePath("/admin/faturas");
+  return { data: { id: faturaId } };
+}
+
+export async function rejeitarFaturaCliente(faturaId: string, motivo: string): Promise<ActionResult> {
+  const supabase = await createServerClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.role !== "admin") return { error: "Apenas administradores podem rejeitar faturas." };
+
+  if (!motivo || !motivo.trim()) return { error: "O motivo da rejeição é obrigatório." };
+
+  const { data: fatura, error: fetchError } = await supabase
+    .from("faturas")
+    .select("id, status, uc_id")
+    .eq("id", faturaId)
+    .single();
+
+  if (fetchError || !fatura) return { error: "Fatura não encontrada." };
+  if (fatura.status !== "pendente") return { error: "Apenas faturas pendentes podem ser rejeitadas." };
+
+  const { error: updateError } = await supabase
+    .from("faturas")
+    .update({ status: "rejeitada", motivo_rejeicao: motivo.trim() })
+    .eq("id", faturaId);
+
+  if (updateError) return { error: "Erro ao rejeitar fatura." };
+
+  // Log de auditoria
+  await supabase.from("faturas_log").insert([
+    {
+      fatura_id: faturaId,
+      campo_alterado: "status",
+      valor_anterior: "pendente",
+      valor_novo: "rejeitada",
+      alterado_por: user.id,
+    },
+    {
+      fatura_id: faturaId,
+      campo_alterado: "motivo_rejeicao",
+      valor_anterior: null,
+      valor_novo: motivo.trim(),
+      alterado_por: user.id,
+    },
+  ]);
+
+  // Buscar código da UC para notificação
+  const { data: ucData } = await supabase
+    .from("unidades_consumidoras")
+    .select("codigo_uc")
+    .eq("id", fatura.uc_id)
+    .single();
+
+  await criarNotificacao(
+    "fatura_cliente",
+    `Fatura rejeitada - UC ${ucData?.codigo_uc ?? fatura.uc_id}: ${motivo.trim()}`,
+    faturaId
+  );
+
+  revalidatePath(`/admin/faturas/${faturaId}`);
+  revalidatePath("/admin/faturas");
+  revalidatePath("/cliente/fatura");
+  return { data: { id: faturaId } };
+}
+
+// ——— Batch Actions ———
+
+interface BatchResult {
+  succeeded: string[];
+  failed: { id: string; error: string }[];
+}
+
+export async function deleteFaturasEmLote(ids: string[]): Promise<BatchResult> {
+  const supabase = await createServerClient();
+
+  // Desvincular relatórios que referenciam essas faturas
+  const { error: unlinkError } = await supabase
+    .from("relatorios")
+    .update({ fatura_id: null })
+    .in("fatura_id", ids);
+
+  if (unlinkError) {
+    return { succeeded: [], failed: ids.map((id) => ({ id, error: "Erro ao desvincular relatórios." })) };
+  }
+
+  const { error } = await supabase
+    .from("faturas")
+    .delete()
+    .in("id", ids);
+
+  if (error) {
+    return { succeeded: [], failed: ids.map((id) => ({ id, error: "Erro ao excluir." })) };
+  }
+
+  revalidatePath("/admin/faturas");
+  revalidatePath("/admin/relatorios");
+  return { succeeded: ids, failed: [] };
+}
+
+export async function confirmarFaturasEmLote(ids: string[]): Promise<BatchResult> {
+  const succeeded: string[] = [];
+  const failed: BatchResult["failed"] = [];
+
+  for (const id of ids) {
+    const result = await confirmarFaturaCliente(id);
+    if (result.error) {
+      failed.push({ id, error: result.error });
+    } else {
+      succeeded.push(id);
+    }
+  }
+
+  revalidatePath("/admin/faturas");
+  return { succeeded, failed };
+}
+
+export async function rejeitarFaturasEmLote(ids: string[], motivo: string): Promise<BatchResult> {
+  const succeeded: string[] = [];
+  const failed: BatchResult["failed"] = [];
+
+  for (const id of ids) {
+    const result = await rejeitarFaturaCliente(id, motivo);
+    if (result.error) {
+      failed.push({ id, error: result.error });
+    } else {
+      succeeded.push(id);
+    }
+  }
+
+  revalidatePath("/admin/faturas");
+  revalidatePath("/cliente/fatura");
+  return { succeeded, failed };
 }
 
 // ——— Criação de fatura com dados de geração (admin) ———
@@ -572,12 +783,17 @@ export async function createFaturaComGeracao(formData: FormData): Promise<Action
     .single();
 
   // Calcular geração estimada e adicionar aos dados de geração
+  const inicioCiclo = (formData.get("inicio_ciclo") as string) || undefined;
+  const fimCiclo = (formData.get("fim_ciclo") as string) || undefined;
+
   if (dadosGeracao?.totais?.geracao_kwh) {
     const { calcularGeracaoEstimadaUC } = await import("@/lib/actions/geracao-estimada");
     const resultado = await calcularGeracaoEstimadaUC(
       uc_id,
       mes_referencia,
-      dadosGeracao.totais.geracao_kwh
+      dadosGeracao.totais.geracao_kwh,
+      inicioCiclo,
+      fimCiclo
     );
 
     if ("data" in resultado && resultado.data) {

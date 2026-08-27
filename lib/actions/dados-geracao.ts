@@ -133,7 +133,7 @@ export async function getUltimoMesComDados(ucIds: string[]): Promise<string | un
   return data?.[0]?.mes_referencia ?? undefined;
 }
 
-export async function getDadosGeracaoCliente(empresaIds: string | string[], ucIds?: string[], mesesLimit = 12) {
+export async function getDadosGeracaoCliente(empresaIds: string | string[], ucIds?: string[], mesesLimit = 12, useFallback = true) {
   const supabase = await createServerClient();
 
   // Usa ucIds se fornecido, senão busca
@@ -153,7 +153,71 @@ export async function getDadosGeracaoCliente(empresaIds: string | string[], ucId
     .order("mes_referencia", { ascending: false });
 
   if (error) return [];
-  return data;
+
+  // Se fallback desabilitado, retorna apenas dados do cache
+  if (!useFallback) return data;
+
+  // ===== FALLBACK: Buscar meses faltantes da API =====
+
+  // Gerar lista de todos os meses no range
+  const now = new Date();
+  const mesesEsperados: string[] = [];
+  for (let i = 0; i < mesesLimit; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const mesRef = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+    mesesEsperados.push(mesRef);
+  }
+
+  // Identificar quais meses estão faltando para cada UC
+  const dadosExistentes = new Set(data.map((d) => `${d.uc_id}:${d.mes_referencia}`));
+  const faltantes: { ucId: string; mesRef: string }[] = [];
+
+  for (const ucId of resolvedUcIds) {
+    for (const mesRef of mesesEsperados) {
+      const key = `${ucId}:${mesRef}`;
+      if (!dadosExistentes.has(key)) {
+        faltantes.push({ ucId, mesRef });
+      }
+    }
+  }
+
+  if (faltantes.length === 0) {
+    // Todos os meses já estão no cache
+    return data;
+  }
+
+  console.log(`[getDadosGeracaoCliente] Faltam ${faltantes.length} combinações UC/mês - buscando da API`);
+
+  // Buscar dados faltantes da API em paralelo (limitado a 10 chamadas simultâneas)
+  const BATCH_SIZE = 10;
+  const novosDados: typeof data = [];
+
+  for (let i = 0; i < faltantes.length; i += BATCH_SIZE) {
+    const batch = faltantes.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map(({ ucId, mesRef }) => getDadosGeracaoMesComFallback(ucId, mesRef))
+    );
+
+    for (const result of batchResults) {
+      if (result) {
+        novosDados.push({
+          id: crypto.randomUUID(), // ID temporário para compatibilidade
+          uc_id: result.uc_id,
+          mes_referencia: result.mes_referencia,
+          geracao_kwh: result.geracao_kwh,
+          geracao_estimada_kwh: result.geracao_estimada_kwh,
+          irradiacao_media: result.irradiacao_media,
+          performance_ratio: result.performance_ratio,
+          indice_performance: result.indice_performance,
+        });
+      }
+    }
+  }
+
+  console.log(`[getDadosGeracaoCliente] Obteve ${novosDados.length} novos registros da API`);
+
+  // Combinar dados do cache + dados da API
+  return [...data, ...novosDados].sort((a, b) => b.mes_referencia.localeCompare(a.mes_referencia));
 }
 
 export async function getDadosGeracaoUC(ucId: string, meses?: number) {
@@ -293,7 +357,7 @@ export async function getResumoGeracaoCliente(empresaIds: string | string[], mes
   };
 }
 
-export async function getEconomiaCliente(empresaIds: string | string[], ucIds?: string[], mesesLimit = 12) {
+export async function getEconomiaCliente(empresaIds: string | string[], ucIds?: string[], mesesLimit = 12, useFallback = true) {
   const supabase = await createServerClient();
 
   // Usa ucIds se fornecido, senao busca
@@ -304,15 +368,10 @@ export async function getEconomiaCliente(empresaIds: string | string[], ucIds?: 
   dataLimite.setMonth(dataLimite.getMonth() - mesesLimit);
   const limiteStr = `${dataLimite.getFullYear()}-${String(dataLimite.getMonth() + 1).padStart(2, "0")}-01`;
 
-  // Buscar dados de geração dos últimos meses
-  const { data: geracoes, error } = await supabase
-    .from("dados_geracao")
-    .select("uc_id, mes_referencia, geracao_kwh")
-    .in("uc_id", resolvedUcIds)
-    .gte("mes_referencia", limiteStr)
-    .order("mes_referencia", { ascending: false });
+  // Buscar dados de geração dos últimos meses (com fallback se habilitado)
+  const geracoes = await getDadosGeracaoCliente(empresaIds, resolvedUcIds, mesesLimit, useFallback);
 
-  if (error || !geracoes) return [];
+  if (!geracoes || geracoes.length === 0) return [];
 
   // Calcular economia em tempo real para cada UC/mês
   const economiaPromises = geracoes.map(async (g) => {
@@ -493,4 +552,211 @@ export async function getInversoresCliente(ucIds: string[]): Promise<UCInversore
   }
 
   return result;
+}
+
+// ============================================
+// FALLBACK: Buscar dados da API quando não existem no cache
+// ============================================
+
+/**
+ * Busca station_ids vinculados a uma UC (via uc_stations).
+ */
+async function getStationIdsFromUC(ucId: string): Promise<{ station_id: string; provider: "solis" | "sungrow" }[]> {
+  const supabase = await createServerClient();
+
+  const { data } = await supabase
+    .from("uc_stations")
+    .select("station_id, provider")
+    .eq("uc_id", ucId);
+
+  if (!data || data.length === 0) {
+    // Fallback: tentar buscar do campo legado station_id
+    const { data: ucLegado } = await supabase
+      .from("unidades_consumidoras")
+      .select("station_id")
+      .eq("id", ucId)
+      .maybeSingle();
+
+    if (ucLegado?.station_id) {
+      return [{ station_id: ucLegado.station_id, provider: "solis" }];
+    }
+
+    return [];
+  }
+
+  return data as { station_id: string; provider: "solis" | "sungrow" }[];
+}
+
+/**
+ * Busca dados de geração da API Solis/SunGrow para um mês específico.
+ * Consolida múltiplos provedores se necessário.
+ */
+async function buscarDadosAPIGeracao(
+  stations: { station_id: string; provider: "solis" | "sungrow" }[],
+  mesReferencia: string
+): Promise<{ geracao_kwh: number; error?: string } | null> {
+  if (stations.length === 0) return null;
+
+  // Importar funções de API
+  const { fetchGeracaoMensalConsolidada } = await import("@/lib/actions/solis");
+
+  try {
+    const result = await fetchGeracaoMensalConsolidada(stations, mesReferencia);
+
+    if (result.error || !result.data) {
+      console.log(`[buscarDadosAPIGeracao] Erro ao buscar da API: ${result.error}`);
+      return { geracao_kwh: 0, error: result.error };
+    }
+
+    return {
+      geracao_kwh: result.data.totais.geracao_kwh,
+    };
+  } catch (error) {
+    console.error(`[buscarDadosAPIGeracao] Exceção ao buscar da API:`, error);
+    return null;
+  }
+}
+
+/**
+ * Salva dados de geração no cache (tabela dados_geracao).
+ */
+async function salvarDadosCache(
+  ucId: string,
+  mesReferencia: string,
+  geracaoKwh: number,
+  geracaoEstimadaKwh: number | null,
+  irradiacao: number | null,
+  performanceRatio: number | null,
+  indicePerformance: string | null
+): Promise<void> {
+  const supabase = await createServerClient();
+
+  await supabase
+    .from("dados_geracao")
+    .upsert(
+      {
+        uc_id: ucId,
+        mes_referencia: mesReferencia,
+        geracao_kwh: geracaoKwh,
+        geracao_estimada_kwh: geracaoEstimadaKwh,
+        irradiacao_media: irradiacao,
+        performance_ratio: performanceRatio,
+        indice_performance: indicePerformance,
+      },
+      { onConflict: "uc_id,mes_referencia" }
+    );
+
+  console.log(`[salvarDadosCache] Salvou dados no cache: UC ${ucId}, mês ${mesReferencia}, geração ${geracaoKwh} kWh`);
+}
+
+/**
+ * Busca dados de geração com fallback automático para API.
+ *
+ * Fluxo:
+ * 1. Tenta buscar de dados_geracao (cache)
+ * 2. Se não encontrar, busca da API Solis/SunGrow
+ * 3. Calcula estimativa e performance
+ * 4. Salva no cache para próximas consultas
+ * 5. Retorna os dados
+ */
+export async function getDadosGeracaoMesComFallback(
+  ucId: string,
+  mesReferencia: string
+): Promise<{
+  uc_id: string;
+  mes_referencia: string;
+  geracao_kwh: number;
+  geracao_estimada_kwh: number | null;
+  irradiacao_media: number | null;
+  performance_ratio: number | null;
+  indice_performance: string | null;
+  source: "cache" | "api";
+} | null> {
+  const supabase = await createServerClient();
+
+  // 1. Tentar buscar do cache primeiro
+  const { data: cached } = await supabase
+    .from("dados_geracao")
+    .select("uc_id, mes_referencia, geracao_kwh, geracao_estimada_kwh, irradiacao_media, performance_ratio, indice_performance")
+    .eq("uc_id", ucId)
+    .eq("mes_referencia", mesReferencia)
+    .maybeSingle();
+
+  if (cached) {
+    console.log(`[getDadosGeracaoMesComFallback] Cache HIT: UC ${ucId}, mês ${mesReferencia}`);
+    return {
+      ...cached,
+      source: "cache" as const,
+    };
+  }
+
+  console.log(`[getDadosGeracaoMesComFallback] Cache MISS: UC ${ucId}, mês ${mesReferencia} - buscando da API`);
+
+  // 2. Cache miss - buscar da API
+  const stations = await getStationIdsFromUC(ucId);
+
+  if (stations.length === 0) {
+    console.log(`[getDadosGeracaoMesComFallback] UC ${ucId} não possui station_id vinculado`);
+    return null;
+  }
+
+  const apiData = await buscarDadosAPIGeracao(stations, mesReferencia);
+
+  if (!apiData || apiData.error) {
+    console.log(`[getDadosGeracaoMesComFallback] Erro ao buscar da API para UC ${ucId}`);
+    return null;
+  }
+
+  const geracaoKwh = apiData.geracao_kwh;
+
+  if (geracaoKwh === 0) {
+    console.log(`[getDadosGeracaoMesComFallback] API retornou geração zero para UC ${ucId}, mês ${mesReferencia}`);
+    return null;
+  }
+
+  // 3. Calcular estimativa e performance
+  const estimativa = await calcularGeracaoEstimadaUC(ucId, mesReferencia, geracaoKwh);
+
+  let geracaoEstimadaKwh: number | null = null;
+  let performanceRatio: number | null = null;
+  let indicePerformance: string | null = null;
+  let irradiacao: number | null = null;
+
+  if ("data" in estimativa) {
+    geracaoEstimadaKwh = estimativa.data.geracao_estimada_kwh;
+    performanceRatio = estimativa.data.pr_percent ?? null;
+    irradiacao = estimativa.data.ghi_wh_m2_dia;
+
+    // Classificar performance
+    if (performanceRatio !== null) {
+      if (performanceRatio >= 98) indicePerformance = "bom";
+      else if (performanceRatio >= 90) indicePerformance = "regular";
+      else indicePerformance = "ruim";
+    }
+  }
+
+  // 4. Salvar no cache
+  await salvarDadosCache(
+    ucId,
+    mesReferencia,
+    geracaoKwh,
+    geracaoEstimadaKwh,
+    irradiacao,
+    performanceRatio,
+    indicePerformance
+  );
+
+  console.log(`[getDadosGeracaoMesComFallback] API → Cache: UC ${ucId}, mês ${mesReferencia}, geração ${geracaoKwh} kWh`);
+
+  // 5. Retornar dados
+  return {
+    uc_id: ucId,
+    mes_referencia: mesReferencia,
+    geracao_kwh: geracaoKwh,
+    geracao_estimada_kwh: geracaoEstimadaKwh,
+    irradiacao_media: irradiacao,
+    performance_ratio: performanceRatio,
+    indice_performance: indicePerformance,
+    source: "api" as const,
+  };
 }

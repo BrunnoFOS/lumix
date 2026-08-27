@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatMesReferencia, formatCurrency } from "@/lib/utils";
-import { FileText, Download, Eye, Search } from "lucide-react";
+import { FileText, Download, Eye, Search, AlertTriangle } from "lucide-react";
 
 interface FaturaRow {
   id: string;
@@ -14,6 +14,7 @@ interface FaturaRow {
   valor_total: number | null;
   consumo_kwh: number | null;
   status: string;
+  motivo_rejeicao: string | null;
   pdf_url: string | null;
   imagem_url: string | null;
   uc: { id: string; codigo_uc: string } | null;
@@ -23,12 +24,14 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = 
   processada: "default",
   pendente: "secondary",
   erro: "destructive",
+  rejeitada: "destructive",
 };
 
 const STATUS_LABELS: Record<string, string> = {
   processada: "Processada",
   pendente: "Pendente",
   erro: "Erro",
+  rejeitada: "Rejeitada",
 };
 
 export function FaturaList({ faturas }: { faturas: FaturaRow[] }) {
@@ -80,55 +83,67 @@ export function FaturaList({ faturas }: { faturas: FaturaRow[] }) {
         </div>
       ) : null}
       {faturasFiltradas.map((fatura) => (
-        <div
-          key={fatura.id}
-          className="flex items-center justify-between rounded-lg border border-border p-4"
-        >
-          <div className="flex items-center gap-3">
-            <FileText className="h-5 w-5 text-muted-foreground" />
-            <div>
-              <p className="text-sm font-medium capitalize">
-                {formatMesReferencia(fatura.mes_referencia)}
-              </p>
-              {fatura.uc && (
-                <p className="text-xs text-muted-foreground">
-                  UC {fatura.uc.codigo_uc}
+        <div key={fatura.id} className="space-y-0">
+          <div
+            className={cn(
+              "flex items-center justify-between rounded-lg border border-border p-4",
+              fatura.status === "rejeitada" && "rounded-b-none border-b-0"
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <FileText className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium capitalize">
+                  {formatMesReferencia(fatura.mes_referencia)}
                 </p>
+                {fatura.uc && (
+                  <p className="text-xs text-muted-foreground">
+                    UC {fatura.uc.codigo_uc}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {(fatura.valor_faturado ?? fatura.valor_total) != null && (
+                <span className="hidden text-sm font-medium sm:block">
+                  {formatCurrency(fatura.valor_faturado ?? fatura.valor_total!)}
+                </span>
+              )}
+              <Badge variant={STATUS_VARIANT[fatura.status] || "secondary"}>
+                {STATUS_LABELS[fatura.status] || fatura.status}
+              </Badge>
+              {fatura.pdf_url && (
+                <a
+                  href={fatura.pdf_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "h-8 w-8")}
+                  title="Baixar PDF"
+                >
+                  <Download className="h-4 w-4" />
+                </a>
+              )}
+              {fatura.imagem_url && !fatura.pdf_url && (
+                <a
+                  href={fatura.imagem_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "h-8 w-8")}
+                  title="Ver imagem"
+                >
+                  <Eye className="h-4 w-4" />
+                </a>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            {(fatura.valor_faturado ?? fatura.valor_total) != null && (
-              <span className="hidden text-sm font-medium sm:block">
-                {formatCurrency(fatura.valor_faturado ?? fatura.valor_total!)}
-              </span>
-            )}
-            <Badge variant={STATUS_VARIANT[fatura.status] || "secondary"}>
-              {STATUS_LABELS[fatura.status] || fatura.status}
-            </Badge>
-            {fatura.pdf_url && (
-              <a
-                href={fatura.pdf_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "h-8 w-8")}
-                title="Baixar PDF"
-              >
-                <Download className="h-4 w-4" />
-              </a>
-            )}
-            {fatura.imagem_url && !fatura.pdf_url && (
-              <a
-                href={fatura.imagem_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "h-8 w-8")}
-                title="Ver imagem"
-              >
-                <Eye className="h-4 w-4" />
-              </a>
-            )}
-          </div>
+          {fatura.status === "rejeitada" && fatura.motivo_rejeicao && (
+            <div className="flex items-start gap-2 rounded-b-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-destructive">Motivo:</span> {fatura.motivo_rejeicao}
+              </p>
+            </div>
+          )}
         </div>
       ))}
     </div>

@@ -169,7 +169,7 @@ export function FaturaDetail({ fatura }: Props) {
             </Button>
           </>
         ) : (
-          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+          <Button variant="outline" size="sm" onClick={() => { resetForm(); setEditing(true); }}>
             <Pencil className="mr-2 h-3.5 w-3.5" />
             Editar
           </Button>

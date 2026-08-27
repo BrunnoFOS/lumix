@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2, MoreHorizontal, Eye, Pencil, Archive, Download } from "lucide-react";
+import { Building2, MoreHorizontal, Eye, Pencil, Archive, Download, ArchiveRestore } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -20,10 +22,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { formatCNPJ } from "@/lib/utils";
-import { arquivarEmpresa } from "@/lib/actions/empresas";
+import { arquivarEmpresa, arquivarEmpresasEmLote } from "@/lib/actions/empresas";
 import { exportToCSV } from "@/lib/export-csv";
 import { Button } from "@/components/ui/button";
+import { BulkActionBar } from "@/components/admin/BulkActionBar";
+import { useRowSelection } from "@/hooks/use-row-selection";
 
 interface Empresa {
   id: string;
@@ -37,6 +42,17 @@ interface Empresa {
 
 export function ClienteTable({ empresas }: { empresas: Empresa[] }) {
   const router = useRouter();
+  const [processing, setProcessing] = useState(false);
+  const {
+    selectedIds,
+    toggle,
+    toggleAll,
+    clearSelection,
+    isSelected,
+    isAllSelected,
+    isIndeterminate,
+    selectedCount,
+  } = useRowSelection(empresas);
 
   async function handleArchive(id: string, arquivada: boolean) {
     await arquivarEmpresa(id, !arquivada);
@@ -50,6 +66,24 @@ export function ClienteTable({ empresas }: { empresas: Empresa[] }) {
     ]));
   }
 
+  async function handleBulkArchive(arquivada: boolean) {
+    setProcessing(true);
+    const ids = Array.from(selectedIds);
+    const result = await arquivarEmpresasEmLote(ids, arquivada);
+
+    if (result.failed.length === 0) {
+      toast.success(`${result.succeeded.length} cliente(s) ${arquivada ? "arquivado(s)" : "desarquivado(s)"}.`);
+    } else if (result.succeeded.length === 0) {
+      toast.error(`Nenhum cliente foi ${arquivada ? "arquivado" : "desarquivado"}.`);
+    } else {
+      toast.warning(`${result.succeeded.length} ${arquivada ? "arquivado(s)" : "desarquivado(s)"}. ${result.failed.length} falha(s).`);
+    }
+
+    clearSelection();
+    setProcessing(false);
+    router.refresh();
+  }
+
   if (empresas.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-12">
@@ -61,6 +95,25 @@ export function ClienteTable({ empresas }: { empresas: Empresa[] }) {
     );
   }
 
+  const hasArquivados = Array.from(selectedIds).some((id) => empresas.find((e) => e.id === id)?.arquivada);
+  const hasNaoArquivados = Array.from(selectedIds).some((id) => !empresas.find((e) => e.id === id)?.arquivada);
+
+  const bulkActions = [];
+  if (hasNaoArquivados) {
+    bulkActions.push({
+      label: "Arquivar",
+      icon: <Archive className="mr-2 h-4 w-4" />,
+      onClick: () => handleBulkArchive(true),
+    });
+  }
+  if (hasArquivados) {
+    bulkActions.push({
+      label: "Desarquivar",
+      icon: <ArchiveRestore className="mr-2 h-4 w-4" />,
+      onClick: () => handleBulkArchive(false),
+    });
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
@@ -69,10 +122,23 @@ export function ClienteTable({ empresas }: { empresas: Empresa[] }) {
           Exportar CSV
         </Button>
       </div>
+      <BulkActionBar
+        selectedCount={selectedCount}
+        onClear={clearSelection}
+        actions={bulkActions}
+        processing={processing}
+      />
       <div className="rounded-lg border border-border">
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">
+              <Checkbox
+                checked={isAllSelected}
+                indeterminate={isIndeterminate}
+                onCheckedChange={toggleAll}
+              />
+            </TableHead>
             <TableHead>Nome</TableHead>
             <TableHead>CNPJ</TableHead>
             <TableHead>Cidade/UF</TableHead>
@@ -82,7 +148,13 @@ export function ClienteTable({ empresas }: { empresas: Empresa[] }) {
         </TableHeader>
         <TableBody>
           {empresas.map((empresa) => (
-            <TableRow key={empresa.id}>
+            <TableRow key={empresa.id} data-state={isSelected(empresa.id) ? "selected" : undefined}>
+              <TableCell>
+                <Checkbox
+                  checked={isSelected(empresa.id)}
+                  onCheckedChange={() => toggle(empresa.id)}
+                />
+              </TableCell>
               <TableCell className="font-medium">
                 <Link
                   href={`/admin/clientes/${empresa.id}`}
@@ -97,7 +169,7 @@ export function ClienteTable({ empresas }: { empresas: Empresa[] }) {
               <TableCell>
                 {empresa.cidade || empresa.estado
                   ? [empresa.cidade, empresa.estado].filter(Boolean).join("/")
-                  : "—"}
+                  : "\u2014"}
               </TableCell>
               <TableCell>
                 <Badge variant={empresa.arquivada ? "outline" : "default"}>

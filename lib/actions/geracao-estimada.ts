@@ -10,6 +10,7 @@ import {
   calcularGeracaoEstimada,
   classificarDesempenho,
   validarUCParaEstimativa,
+  calcularSegmentosCiclo,
 } from "@/lib/geracao-estimada";
 
 
@@ -65,11 +66,17 @@ interface ResultadoEstimativa {
  * Busca todos os dados necessários (UC + GHI) e retorna o resultado.
  *
  * Se geracaoRealKwh for fornecido, também calcula o PR e classificação.
+ *
+ * Se inicioCiclo e fimCiclo forem fornecidos e o ciclo cruzar meses,
+ * o GHI é ponderado proporcionalmente pelos dias de cada mês.
+ * Ex: ciclo 13/05 a 12/06 → (19/31)*GHI_mai + (12/30)*GHI_jun ponderado.
  */
 export async function calcularGeracaoEstimadaUC(
   ucId: string,
   mesReferencia: string,
-  geracaoRealKwh?: number
+  geracaoRealKwh?: number,
+  inicioCiclo?: string,
+  fimCiclo?: string
 ): Promise<{ data: ResultadoEstimativa } | { error: string }> {
   const supabase = await createServerClient();
 
@@ -94,19 +101,6 @@ export async function calcularGeracaoEstimadaUC(
     };
   }
 
-  // Extrair mês e ano do mes_referencia
-  const refDate = new Date(mesReferencia);
-  const mes = refDate.getUTCMonth(); // 0-indexed
-  const ano = refDate.getUTCFullYear();
-
-  // Buscar GHI
-  const ghi = await buscarGHI(uc.cidade!, uc.estado!, mes);
-  if (ghi === null) {
-    return {
-      error: `GHI não encontrado para ${uc.cidade}/${uc.estado}. Verifique se o município está cadastrado corretamente.`,
-    };
-  }
-
   // Calcular degradação
   const degradacao = calcularDegradacaoAcumulada({
     dataInstalacao: uc.data_inicio_degradacao ?? uc.data_instalacao!,
@@ -115,19 +109,64 @@ export async function calcularGeracaoEstimadaUC(
     degradacaoAnosSeguintes: Number(uc.degradacao_anos_seguintes),
   });
 
+  let ghiPonderado: number;
+  let diasTotal: number;
+
+  // Verificar se temos datas do ciclo que cruzam meses
+  if (inicioCiclo && fimCiclo) {
+    const segmentos = calcularSegmentosCiclo(inicioCiclo, fimCiclo);
+
+    if (segmentos.length === 0) {
+      return { error: "Datas do ciclo inválidas (fim antes do início)." };
+    }
+
+    // Buscar GHI para cada mês do ciclo e ponderar
+    let somaGhiDias = 0;
+    diasTotal = 0;
+
+    for (const seg of segmentos) {
+      const ghi = await buscarGHI(uc.cidade!, uc.estado!, seg.mes);
+      if (ghi === null) {
+        const nomeMes = MES_COLUNA[seg.mes] ?? String(seg.mes + 1);
+        return {
+          error: `GHI não encontrado para ${uc.cidade}/${uc.estado} (mês: ${nomeMes}). Verifique se o município está cadastrado corretamente.`,
+        };
+      }
+      somaGhiDias += (ghi / 1000) * seg.dias;
+      diasTotal += seg.dias;
+    }
+
+    // GHI ponderado (Wh/m²/dia) = média ponderada pelos dias
+    ghiPonderado = diasTotal > 0 ? (somaGhiDias / diasTotal) * 1000 : 0;
+  } else {
+    // Comportamento original: mês inteiro do mes_referencia
+    const refDate = new Date(mesReferencia);
+    const mes = refDate.getUTCMonth();
+    const ano = refDate.getUTCFullYear();
+
+    const ghi = await buscarGHI(uc.cidade!, uc.estado!, mes);
+    if (ghi === null) {
+      return {
+        error: `GHI não encontrado para ${uc.cidade}/${uc.estado}. Verifique se o município está cadastrado corretamente.`,
+      };
+    }
+
+    ghiPonderado = ghi;
+    diasTotal = diasNoMes(ano, mes);
+  }
+
   // Calcular geração estimada
-  const dias = diasNoMes(ano, mes);
   const geracaoEstimada = calcularGeracaoEstimada({
     potenciaKwp: Number(uc.potencia_instalada_kwp),
-    ghiWhM2Dia: ghi,
-    diasNoMes: dias,
+    ghiWhM2Dia: ghiPonderado,
+    diasNoMes: diasTotal,
     fatorRendimento: Number(uc.fator_rendimento),
     degradacaoAcumulada: degradacao,
   });
 
   const resultado: ResultadoEstimativa = {
     geracao_estimada_kwh: Math.round(geracaoEstimada * 100) / 100,
-    ghi_wh_m2_dia: ghi,
+    ghi_wh_m2_dia: ghiPonderado,
     degradacao_acumulada: degradacao,
   };
 

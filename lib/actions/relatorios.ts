@@ -360,6 +360,79 @@ export async function checkRelatorioGerado(ucId: string, mesReferencia: string):
  * Exclui permanentemente um relatório
  * Recomendado apenas para relatórios arquivados
  */
+// ——— Batch Actions ———
+
+interface BatchResult {
+  succeeded: string[];
+  failed: { id: string; error: string }[];
+}
+
+export async function arquivarRelatoriosEmLote(ids: string[]): Promise<BatchResult> {
+  const supabase = await createServerClient();
+
+  // Filtrar relatórios que não são "enviado" (só esses podem ser arquivados)
+  const { data: rels } = await supabase
+    .from("relatorios")
+    .select("id, status_envio")
+    .in("id", ids);
+
+  const validIds = (rels ?? []).filter((r) => r.status_envio !== "enviado").map((r) => r.id);
+  const rejectedIds = ids.filter((id) => !validIds.includes(id));
+
+  const failed: BatchResult["failed"] = rejectedIds.map((id) => ({
+    id,
+    error: "Relatório já enviado não pode ser arquivado.",
+  }));
+
+  if (validIds.length > 0) {
+    const { error } = await supabase
+      .from("relatorios")
+      .update({ arquivado: true })
+      .in("id", validIds);
+
+    if (error) {
+      return { succeeded: [], failed: ids.map((id) => ({ id, error: "Erro ao arquivar." })) };
+    }
+  }
+
+  revalidatePath("/admin/relatorios");
+  revalidatePath("/admin/faturas");
+  return { succeeded: validIds, failed };
+}
+
+export async function desarquivarRelatoriosEmLote(ids: string[]): Promise<BatchResult> {
+  const supabase = await createServerClient();
+
+  const { error } = await supabase
+    .from("relatorios")
+    .update({ arquivado: false })
+    .in("id", ids);
+
+  if (error) {
+    return { succeeded: [], failed: ids.map((id) => ({ id, error: "Erro ao desarquivar." })) };
+  }
+
+  revalidatePath("/admin/relatorios");
+  revalidatePath("/admin/faturas");
+  return { succeeded: ids, failed: [] };
+}
+
+export async function deleteRelatoriosEmLote(ids: string[]): Promise<BatchResult> {
+  const supabase = await createServerClient();
+
+  const { error } = await supabase
+    .from("relatorios")
+    .delete()
+    .in("id", ids);
+
+  if (error) {
+    return { succeeded: [], failed: ids.map((id) => ({ id, error: "Erro ao excluir." })) };
+  }
+
+  revalidatePath("/admin/relatorios");
+  return { succeeded: ids, failed: [] };
+}
+
 export async function deleteRelatorio(id: string): Promise<{ data?: { id: string }; error?: string }> {
   const supabase = await createServerClient();
 
