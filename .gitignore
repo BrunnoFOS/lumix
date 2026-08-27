@@ -43,3 +43,5 @@ env/
 next-env.d.ts
 
 nul
+# Added by code-review-graph
+.code-review-graph/

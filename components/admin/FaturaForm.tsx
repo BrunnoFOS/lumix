@@ -334,9 +334,12 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
               )}
 
               {!selectedUC?.station_id && !loadingGeracao && !geracao && (
-                <p className="text-sm text-amber-600">
-                  UC sem vinculação com provedor (sem station_id).
-                </p>
+                <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <p className="text-sm text-amber-800">
+                    UC sem vinculação com provedor. Vincule a UC a uma usina antes de inserir a fatura.
+                  </p>
+                </div>
               )}
 
               {loadingGeracao && (
@@ -419,13 +422,20 @@ export function FaturaForm({ ucs, clientes = [] }: { ucs: UC[]; clientes?: Clien
           </CardContent>
         </Card>
 
-        <div className="flex gap-3">
-          <Button type="submit" disabled={isPending || processingStatus === "polling"}>
-            {isPending ? "Salvando..." : "Inserir fatura"}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => router.back()}>
-            Cancelar
-          </Button>
+        <div className="space-y-2">
+          <div className="flex gap-3">
+            <Button type="submit" disabled={isPending || processingStatus === "polling" || !geracao}>
+              {isPending ? "Salvando..." : "Inserir fatura"}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => router.back()}>
+              Cancelar
+            </Button>
+          </div>
+          {!geracao && ucId && mes && (
+            <p className="text-sm text-muted-foreground">
+              Busque os dados de geração antes de inserir a fatura.
+            </p>
+          )}
         </div>
       </div>
     </form>
