@@ -1,12 +1,13 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentProfile } from "@/lib/actions/profile";
-import { getUCIdsCliente, getUltimoMesComDados, getResumoGeracaoCliente, getDadosGeracaoCliente, getEconomiaCliente, getUsinasOfflineCliente } from "@/lib/actions/dados-geracao";
+import { getUCIdsCliente, getUltimoMesComDados, getResumoGeracaoCliente, getDadosGeracaoCliente, getEconomiaCliente, getUsinasOfflineCliente, getAcumuladoCliente } from "@/lib/actions/dados-geracao";
 import { DashboardCards } from "@/components/cliente/DashboardCards";
 import { GeracaoChartLazy } from "@/components/cliente/GeracaoChartLazy";
 import { EconomiaChartLazy } from "@/components/cliente/EconomiaChartLazy";
 import { DashboardPeriodFilter } from "@/components/cliente/DashboardPeriodFilter";
 import { UsinasOfflineBanner } from "@/components/cliente/UsinasOfflineBanner";
+import { AcumuladoCards } from "@/components/cliente/AcumuladoCards";
 
 export const dynamic = "force-dynamic";
 
@@ -25,10 +26,11 @@ export default async function ClienteDashboardPage({ searchParams }: Props) {
     redirect("/login");
   }
 
-  // Fetch ucIds and usinasOffline in parallel (both only need empresa_id)
-  const [ucIds, usinasOffline] = await Promise.all([
+  // Fetch ucIds, usinasOffline and acumulado in parallel (all only need empresa_id)
+  const [ucIds, usinasOffline, acumulado] = await Promise.all([
     getUCIdsCliente(profile.empresa_id),
     getUsinasOfflineCliente(profile.empresa_id),
+    getAcumuladoCliente(profile.empresa_id),
   ]);
 
   // mesSelecionado depends on ucIds
@@ -100,6 +102,12 @@ export default async function ClienteDashboardPage({ searchParams }: Props) {
         economiaTotal={resumo.economia_total}
         performance={resumo.performance}
         performanceRatio={resumo.performance_ratio ?? null}
+      />
+
+      <AcumuladoCards
+        geracaoAcumulada={acumulado.geracao_acumulada_total}
+        economiaAcumulada={acumulado.economia_acumulada_total}
+        atualizadoEm={acumulado.acumulado_atualizado_em}
       />
 
       <GeracaoChartLazy dados={chartData} />

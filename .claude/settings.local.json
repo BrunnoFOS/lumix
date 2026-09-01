@@ -96,7 +96,8 @@
       "Bash(\"C:\\\\Users\\\\brunn\\\\AppData\\\\Local\\\\Python\\\\bin\\\\python.exe\" -m code_review_graph:*)",
       "Bash(\"C:\\\\Users\\\\brunn\\\\AppData\\\\Local\\\\Python\\\\bin\\\\python.exe\" -m code_review_graph build:*)",
       "Bash(\"C:\\\\Users\\\\brunn\\\\AppData\\\\Local\\\\Python\\\\bin\\\\python.exe\" -m code_review_graph status --repo \"C:\\\\Users\\\\brunn\\\\lumix-projeto\")",
-      "Bash(\"C:\\\\Users\\\\brunn\\\\AppData\\\\Local\\\\Python\\\\bin\\\\python.exe\" -m code_review_graph query --help)"
+      "Bash(\"C:\\\\Users\\\\brunn\\\\AppData\\\\Local\\\\Python\\\\bin\\\\python.exe\" -m code_review_graph query --help)",
+      "Bash(git stash:*)"
     ]
   }
 }

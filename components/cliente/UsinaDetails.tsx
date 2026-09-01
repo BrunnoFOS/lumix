@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatDate, formatKWh } from "@/lib/utils";
+import { formatCurrency, formatDate, formatKWh } from "@/lib/utils";
 import {
   Zap,
   MapPin,
@@ -13,6 +13,7 @@ import {
   Gauge,
   Link2,
   WifiOff,
+  History,
 } from "lucide-react";
 import type { InversorDetalhe, UCInversores } from "@/lib/actions/dados-geracao";
 
@@ -42,6 +43,9 @@ interface UCData {
   degradacao_anos_seguintes: number | null;
   data_inicio_degradacao: string | null;
   observacoes: string | null;
+  geracao_acumulada_kwh: number | null;
+  economia_acumulada_rs: number | null;
+  acumulado_atualizado_em: string | null;
 }
 
 interface StationInfo {
@@ -107,6 +111,15 @@ function getUCStatus(inversores: InversorDetalhe[]): { label: string; variant: "
   if (allOffline) return { label: "Offline", variant: "outline" };
   if (allOnline) return { label: "Online", variant: "default" };
   return { label: "Parcial", variant: "outline" };
+}
+
+function formatarGeracaoAcumulada(kwh: number | null): string {
+  if (kwh === null || kwh === undefined) return "—";
+  return (
+    new Intl.NumberFormat("pt-BR", {
+      maximumFractionDigits: 1,
+    }).format(kwh) + " kWh"
+  );
 }
 
 function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
@@ -365,6 +378,34 @@ export function UsinaDetails({ ucs, inversoresData = [], stationsData = {}, tota
                   )}
                 </CardContent>
               </Card>
+
+              {/* Histórico da usina (acumulados) */}
+              {(uc.geracao_acumulada_kwh != null || uc.economia_acumulada_rs != null) && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <History className="h-4 w-4 text-primary" />
+                      Desde o início
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <InfoRow
+                      label="Geração acumulada"
+                      value={formatarGeracaoAcumulada(uc.geracao_acumulada_kwh)}
+                    />
+                    <InfoRow
+                      label="Economia acumulada"
+                      value={uc.economia_acumulada_rs != null ? formatCurrency(uc.economia_acumulada_rs) : "—"}
+                    />
+                    {uc.acumulado_atualizado_em && (
+                      <InfoRow
+                        label="Atualizado em"
+                        value={formatDate(uc.acumulado_atualizado_em)}
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Vínculos com provedores */}
               {stations.length > 0 && (

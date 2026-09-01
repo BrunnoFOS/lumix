@@ -760,3 +760,55 @@ export async function getDadosGeracaoMesComFallback(
     source: "api" as const,
   };
 }
+
+export interface AcumuladoUC {
+  id: string;
+  codigo_uc: string;
+  titular: string;
+  geracao_acumulada_kwh: number | null;
+  economia_acumulada_rs: number | null;
+  acumulado_atualizado_em: string | null;
+}
+
+export interface AcumuladoConsolidado {
+  geracao_acumulada_total: number;
+  economia_acumulada_total: number;
+  acumulado_atualizado_em: string | null;
+  ucs: AcumuladoUC[];
+}
+
+/**
+ * Busca dados acumulados (geração e economia) de todas as UCs ativas de uma empresa.
+ * Valores vêm prontos do banco (populados por cron mensal).
+ */
+export async function getAcumuladoCliente(empresaId: string): Promise<AcumuladoConsolidado> {
+  const supabase = await createServerClient();
+
+  const { data: ucs } = await supabase
+    .from("unidades_consumidoras")
+    .select("id, codigo_uc, titular, geracao_acumulada_kwh, economia_acumulada_rs, acumulado_atualizado_em")
+    .eq("empresa_id", empresaId)
+    .eq("ativa", true)
+    .eq("arquivada", false);
+
+  if (!ucs || ucs.length === 0) {
+    return { geracao_acumulada_total: 0, economia_acumulada_total: 0, acumulado_atualizado_em: null, ucs: [] };
+  }
+
+  const geracao_acumulada_total = ucs.reduce((sum, uc) => sum + (uc.geracao_acumulada_kwh ?? 0), 0);
+  const economia_acumulada_total = ucs.reduce((sum, uc) => sum + (uc.economia_acumulada_rs ?? 0), 0);
+
+  // Usar a data de atualização mais recente entre todas as UCs
+  const acumulado_atualizado_em = ucs.reduce<string | null>((latest, uc) => {
+    if (!uc.acumulado_atualizado_em) return latest;
+    if (!latest) return uc.acumulado_atualizado_em;
+    return uc.acumulado_atualizado_em > latest ? uc.acumulado_atualizado_em : latest;
+  }, null);
+
+  return {
+    geracao_acumulada_total,
+    economia_acumulada_total,
+    acumulado_atualizado_em,
+    ucs,
+  };
+}

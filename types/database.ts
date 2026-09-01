@@ -82,6 +82,9 @@ export interface UnidadeConsumidora {
   arquivada: boolean;
   station_id: string | null;
   observacoes: string | null;
+  geracao_acumulada_kwh: number | null;
+  economia_acumulada_rs: number | null;
+  acumulado_atualizado_em: string | null;
   created_at: string;
   updated_at: string;
 }

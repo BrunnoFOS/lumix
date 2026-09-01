@@ -18,7 +18,7 @@ export default async function UsinaPage() {
   // Fetch UCs first (needed for uc_stations query)
   const { data: ucs } = await supabase
     .from("unidades_consumidoras")
-    .select("id, codigo_uc, titular, endereco, cidade, estado, distribuidora, enquadramento_tarifario, modalidade_tarifaria, grupo_tarifario, subgrupo, potencia_instalada_kwp, quantidade_modulos, modelo_modulos, potencia_modulo_w, quantidade_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, geracao_estimada_mensal_kwh, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, data_inicio_degradacao, ativa, observacoes")
+    .select("id, codigo_uc, titular, endereco, cidade, estado, distribuidora, enquadramento_tarifario, modalidade_tarifaria, grupo_tarifario, subgrupo, potencia_instalada_kwp, quantidade_modulos, modelo_modulos, potencia_modulo_w, quantidade_inversores, modelo_inversores, potencia_inversor_kw, data_instalacao, geracao_estimada_mensal_kwh, fator_rendimento, degradacao_ano_zero, degradacao_anos_seguintes, data_inicio_degradacao, ativa, observacoes, geracao_acumulada_kwh, economia_acumulada_rs, acumulado_atualizado_em")
     .eq("empresa_id", profile.empresa_id)
     .eq("ativa", true)
     .order("codigo_uc");
