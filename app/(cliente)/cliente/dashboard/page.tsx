@@ -1,30 +1,16 @@
-import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentProfile } from "@/lib/actions/profile";
-import { getUCIdsCliente, getUltimoMesComDados, getResumoGeracaoCliente, getResumoGeracaoClienteRange, getDadosGeracaoCliente, getEconomiaCliente, getUsinasOfflineCliente, getAcumuladoCliente } from "@/lib/actions/dados-geracao";
-import { DashboardCards } from "@/components/cliente/DashboardCards";
+import { getUCIdsCliente, getUltimoMesComDados, getResumoGeracaoCliente, getDadosGeracaoCliente, getEconomiaCliente, getUsinasOfflineCliente, getAcumuladoCliente } from "@/lib/actions/dados-geracao";
 import { GeracaoChartLazy } from "@/components/cliente/GeracaoChartLazy";
 import { EconomiaChartLazy } from "@/components/cliente/EconomiaChartLazy";
-import { DashboardPeriodFilter } from "@/components/cliente/DashboardPeriodFilter";
+import { DashboardKPISection } from "@/components/cliente/DashboardKPISection";
 import { UsinasOfflineBanner } from "@/components/cliente/UsinasOfflineBanner";
 import { AcumuladoCards } from "@/components/cliente/AcumuladoCards";
 
 export const dynamic = "force-dynamic";
 
-/** Deriva mes_referencia (primeiro dia do mês) de uma data qualquer */
-function toMesReferencia(dateStr: string): string {
-  return dateStr.substring(0, 7) + "-01";
-}
-
-interface Props {
-  searchParams: Promise<{ mes?: string; inicio?: string; fim?: string }>;
-}
-
-export default async function ClienteDashboardPage({ searchParams }: Props) {
-  const [profile, params] = await Promise.all([
-    getCurrentProfile(),
-    searchParams,
-  ]);
+export default async function ClienteDashboardPage() {
+  const profile = await getCurrentProfile();
 
   if (!profile || !profile.empresa_id) {
     redirect("/login");
@@ -37,29 +23,21 @@ export default async function ClienteDashboardPage({ searchParams }: Props) {
     getAcumuladoCliente(profile.empresa_id),
   ]);
 
-  // Determinar se filtro é por range de datas ou mês único
-  const hasRange = params.inicio && params.fim;
-  const mesInicio = hasRange ? toMesReferencia(params.inicio!) : null;
-  const mesFim = hasRange ? toMesReferencia(params.fim!) : null;
+  // Último mês com dados (para KPI inicial e default do filtro)
+  const ultimoMes = await getUltimoMesComDados(ucIds);
 
-  // Fallback: último mês com dados
-  const mesFallback = !hasRange
-    ? (params.mes || await getUltimoMesComDados(ucIds))
-    : undefined;
-
-  // KPI cards: afetados pelo filtro de datas (range ou mês único)
-  const resumoPromise = hasRange && mesInicio && mesFim
-    ? getResumoGeracaoClienteRange(profile.empresa_id, mesInicio, mesFim, ucIds)
-    : getResumoGeracaoCliente(profile.empresa_id, mesFallback, ucIds);
-
-  // Gráficos: sempre últimos 12 meses (independem do filtro)
-  const [resumo, dadosGeracao, dadosEconomia] = await Promise.all([
-    resumoPromise,
-    getDadosGeracaoCliente(profile.empresa_id, ucIds),
-    getEconomiaCliente(profile.empresa_id, ucIds),
+  // KPI cards: com fallback para API (apenas os 4 KPIs buscam da API)
+  // Gráficos: sem fallback, usam apenas dados já existentes no banco
+  const [resumo, dadosGeracao] = await Promise.all([
+    getResumoGeracaoCliente(profile.empresa_id, ultimoMes, ucIds),
+    getDadosGeracaoCliente(profile.empresa_id, ucIds, 12, false),
   ]);
 
-  // Agrupar dados por mes para o grafico (ultimos 12 meses)
+  const dadosEconomia = await getEconomiaCliente(
+    profile.empresa_id, ucIds, 12, false, dadosGeracao
+  );
+
+  // Agrupar dados por mês para o gráfico (últimos 12 meses)
   const dadosPorMes = new Map<string, { geracao_kwh: number; geracao_estimada_kwh: number }>();
   for (const dado of dadosGeracao) {
     const existing = dadosPorMes.get(dado.mes_referencia);
@@ -82,7 +60,7 @@ export default async function ClienteDashboardPage({ searchParams }: Props) {
     .sort((a, b) => a.mes_referencia.localeCompare(b.mes_referencia))
     .slice(-12);
 
-  // Agrupar economia por mes (somar UCs do mesmo mes)
+  // Agrupar economia por mês (somar UCs do mesmo mês)
   const economiaPorMes = new Map<string, number>();
   for (const dado of dadosEconomia) {
     const existing = economiaPorMes.get(dado.mes_referencia) ?? 0;
@@ -97,31 +75,28 @@ export default async function ClienteDashboardPage({ searchParams }: Props) {
     .sort((a, b) => a.mes_referencia.localeCompare(b.mes_referencia))
     .slice(-12);
 
-  // Mês default para popular os inputs do filtro
-  const mesParaFiltro = mesFallback || mesFim || undefined;
-
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Acompanhe a geração da sua usina
-          </p>
-        </div>
-        <Suspense>
-          <DashboardPeriodFilter defaultMes={mesParaFiltro} />
-        </Suspense>
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Acompanhe a geração da sua usina
+        </p>
       </div>
 
       <UsinasOfflineBanner usinas={usinasOffline} />
 
-      <DashboardCards
-        geracaoTotal={resumo.geracao_total}
-        estimadaTotal={resumo.estimada_total}
-        economiaTotal={resumo.economia_total}
-        performance={resumo.performance}
-        performanceRatio={resumo.performance_ratio ?? null}
+      <DashboardKPISection
+        empresaId={profile.empresa_id}
+        ucIds={ucIds}
+        initialResumo={{
+          geracao_total: resumo.geracao_total,
+          estimada_total: resumo.estimada_total,
+          economia_total: resumo.economia_total,
+          performance: resumo.performance,
+          performance_ratio: resumo.performance_ratio ?? null,
+        }}
+        defaultMes={ultimoMes}
       />
 
       <AcumuladoCards
