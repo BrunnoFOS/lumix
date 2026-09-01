@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentProfile } from "@/lib/actions/profile";
-import { getUCIdsCliente, getUltimoMesComDados, getResumoGeracaoCliente, getDadosGeracaoCliente, getEconomiaCliente, getUsinasOfflineCliente, getAcumuladoCliente } from "@/lib/actions/dados-geracao";
+import { getUCIdsCliente, getUltimoMesComDados, getResumoGeracaoCliente, getResumoGeracaoClienteRange, getDadosGeracaoCliente, getEconomiaCliente, getUsinasOfflineCliente, getAcumuladoCliente } from "@/lib/actions/dados-geracao";
 import { DashboardCards } from "@/components/cliente/DashboardCards";
 import { GeracaoChartLazy } from "@/components/cliente/GeracaoChartLazy";
 import { EconomiaChartLazy } from "@/components/cliente/EconomiaChartLazy";
@@ -11,12 +11,16 @@ import { AcumuladoCards } from "@/components/cliente/AcumuladoCards";
 
 export const dynamic = "force-dynamic";
 
+/** Deriva mes_referencia (primeiro dia do mês) de uma data qualquer */
+function toMesReferencia(dateStr: string): string {
+  return dateStr.substring(0, 7) + "-01";
+}
+
 interface Props {
-  searchParams: Promise<{ mes?: string }>;
+  searchParams: Promise<{ mes?: string; inicio?: string; fim?: string }>;
 }
 
 export default async function ClienteDashboardPage({ searchParams }: Props) {
-  // Buscar profile e searchParams em paralelo
   const [profile, params] = await Promise.all([
     getCurrentProfile(),
     searchParams,
@@ -33,11 +37,24 @@ export default async function ClienteDashboardPage({ searchParams }: Props) {
     getAcumuladoCliente(profile.empresa_id),
   ]);
 
-  // mesSelecionado depends on ucIds
-  const mesSelecionado = params.mes || await getUltimoMesComDados(ucIds);
+  // Determinar se filtro é por range de datas ou mês único
+  const hasRange = params.inicio && params.fim;
+  const mesInicio = hasRange ? toMesReferencia(params.inicio!) : null;
+  const mesFim = hasRange ? toMesReferencia(params.fim!) : null;
 
+  // Fallback: último mês com dados
+  const mesFallback = !hasRange
+    ? (params.mes || await getUltimoMesComDados(ucIds))
+    : undefined;
+
+  // KPI cards: afetados pelo filtro de datas (range ou mês único)
+  const resumoPromise = hasRange && mesInicio && mesFim
+    ? getResumoGeracaoClienteRange(profile.empresa_id, mesInicio, mesFim, ucIds)
+    : getResumoGeracaoCliente(profile.empresa_id, mesFallback, ucIds);
+
+  // Gráficos: sempre últimos 12 meses (independem do filtro)
   const [resumo, dadosGeracao, dadosEconomia] = await Promise.all([
-    getResumoGeracaoCliente(profile.empresa_id, mesSelecionado, ucIds),
+    resumoPromise,
     getDadosGeracaoCliente(profile.empresa_id, ucIds),
     getEconomiaCliente(profile.empresa_id, ucIds),
   ]);
@@ -80,6 +97,9 @@ export default async function ClienteDashboardPage({ searchParams }: Props) {
     .sort((a, b) => a.mes_referencia.localeCompare(b.mes_referencia))
     .slice(-12);
 
+  // Mês default para popular os inputs do filtro
+  const mesParaFiltro = mesFallback || mesFim || undefined;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -90,7 +110,7 @@ export default async function ClienteDashboardPage({ searchParams }: Props) {
           </p>
         </div>
         <Suspense>
-          <DashboardPeriodFilter defaultMes={mesSelecionado} />
+          <DashboardPeriodFilter defaultMes={mesParaFiltro} />
         </Suspense>
       </div>
 

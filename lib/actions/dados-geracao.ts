@@ -357,6 +357,88 @@ export async function getResumoGeracaoCliente(empresaIds: string | string[], mes
   };
 }
 
+/**
+ * Busca resumo de geração agregado para um range de meses (mesInicio..mesFim).
+ * KPIs somam todos os meses no range. Performance é a média ponderada.
+ */
+export async function getResumoGeracaoClienteRange(
+  empresaIds: string | string[],
+  mesInicio: string,
+  mesFim: string,
+  ucIds?: string[]
+) {
+  const supabase = await createServerClient();
+  const ids = Array.isArray(empresaIds) ? empresaIds : [empresaIds];
+
+  const resolvedUcIds = ucIds ?? await getUCIdsCliente(empresaIds);
+  if (resolvedUcIds.length === 0) {
+    return { geracao_total: 0, estimada_total: 0, economia_total: 0, performance: null, performance_ratio: null };
+  }
+
+  // Buscar UCs
+  const { data: ucsData } = await supabase
+    .from("unidades_consumidoras")
+    .select("id, codigo_uc, empresa_id, geracao_estimada_mensal_kwh")
+    .in("id", resolvedUcIds)
+    .eq("ativa", true);
+  const ucs = ucsData ?? [];
+  if (ucs.length === 0) {
+    return { geracao_total: 0, estimada_total: 0, economia_total: 0, performance: null, performance_ratio: null };
+  }
+
+  // Buscar dados_geracao no range
+  const { data: geracoes } = await supabase
+    .from("dados_geracao")
+    .select("uc_id, mes_referencia, geracao_kwh, geracao_estimada_kwh, performance_ratio, indice_performance")
+    .in("uc_id", resolvedUcIds)
+    .gte("mes_referencia", mesInicio)
+    .lte("mes_referencia", mesFim);
+
+  if (!geracoes || geracoes.length === 0) {
+    return { geracao_total: 0, estimada_total: 0, economia_total: 0, performance: null, performance_ratio: null };
+  }
+
+  // Agregar por UC+mês, recalculando estimativa e economia
+  const calculosPromises = geracoes.map(async (g) => {
+    if (!g.geracao_kwh) return null;
+    const [estimativa, economia] = await Promise.all([
+      calcularGeracaoEstimadaUC(g.uc_id, g.mes_referencia, g.geracao_kwh),
+      calcularEconomiaUC(g.uc_id, g.mes_referencia, g.geracao_kwh),
+    ]);
+    if ("error" in estimativa) return null;
+    return {
+      geracao_kwh: g.geracao_kwh,
+      geracao_estimada_kwh: estimativa.data.geracao_estimada_kwh,
+      economia_rs: economia.economia_rs,
+      pr_percent: estimativa.data.pr_percent,
+    };
+  });
+
+  const calculos = (await Promise.all(calculosPromises)).filter((e): e is NonNullable<typeof e> => e !== null);
+
+  const geracao_total = calculos.reduce((sum, c) => sum + c.geracao_kwh, 0);
+  const estimada_total = calculos.reduce((sum, c) => sum + c.geracao_estimada_kwh, 0);
+  const economia_total = calculos.reduce((sum, c) => sum + c.economia_rs, 0);
+
+  const prs = calculos.filter((c) => c.pr_percent !== undefined).map((c) => c.pr_percent!);
+  const avgRatio = prs.length > 0 ? prs.reduce((a, b) => a + b, 0) / prs.length : null;
+
+  let performance: string | null = null;
+  if (avgRatio !== null) {
+    if (avgRatio >= 98) performance = "bom";
+    else if (avgRatio >= 90) performance = "regular";
+    else performance = "ruim";
+  }
+
+  return {
+    geracao_total,
+    estimada_total,
+    economia_total,
+    performance,
+    performance_ratio: avgRatio,
+  };
+}
+
 export async function getEconomiaCliente(empresaIds: string | string[], ucIds?: string[], mesesLimit = 12, useFallback = true) {
   const supabase = await createServerClient();
 

@@ -4,12 +4,13 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Search } from "lucide-react";
 
 export function DashboardPeriodFilter({ defaultMes }: { defaultMes?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Derivar datas padrão a partir do mês
   function defaultDates(mes?: string) {
     if (!mes) return { inicio: "", fim: "" };
     const [y, m] = mes.split("-").map(Number);
@@ -28,32 +29,16 @@ export function DashboardPeriodFilter({ defaultMes }: { defaultMes?: string }) {
   const [inicio, setInicio] = useState(paramInicio || defaults.inicio);
   const [fim, setFim] = useState(paramFim || defaults.fim);
 
-  function handleChange(field: "inicio" | "fim", value: string) {
-    const newInicio = field === "inicio" ? value : inicio;
-    const newFim = field === "fim" ? value : fim;
-
-    if (field === "inicio") setInicio(value);
-    if (field === "fim") setFim(value);
-
-    const params = new URLSearchParams(searchParams.toString());
-    if (newInicio) {
-      params.set("inicio", newInicio);
-    } else {
-      params.delete("inicio");
-    }
-    if (newFim) {
-      params.set("fim", newFim);
-      // Derivar mes do fim para compatibilidade
-      params.set("mes", `${newFim.substring(0, 7)}-01`);
-    } else {
-      params.delete("fim");
-      params.delete("mes");
-    }
+  function handleSubmit() {
+    if (!inicio || !fim) return;
+    const params = new URLSearchParams();
+    params.set("inicio", inicio);
+    params.set("fim", fim);
     router.push(`/cliente/dashboard?${params.toString()}`);
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <Label className="text-sm text-muted-foreground whitespace-nowrap">
         Período:
       </Label>
@@ -61,15 +46,29 @@ export function DashboardPeriodFilter({ defaultMes }: { defaultMes?: string }) {
         type="date"
         className="w-40"
         value={inicio}
-        onChange={(e) => handleChange("inicio", e.target.value)}
+        onChange={(e) => setInicio(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") handleSubmit();
+        }}
       />
       <span className="text-sm text-muted-foreground">a</span>
       <Input
         type="date"
         className="w-40"
         value={fim}
-        onChange={(e) => handleChange("fim", e.target.value)}
+        onChange={(e) => setFim(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") handleSubmit();
+        }}
       />
+      <Button
+        size="sm"
+        onClick={handleSubmit}
+        disabled={!inicio || !fim}
+      >
+        <Search className="mr-1 h-4 w-4" />
+        Filtrar
+      </Button>
     </div>
   );
 }
